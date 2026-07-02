@@ -20,7 +20,6 @@ dataset= pybop.import_pybamm_solution(solution)
 #---updating parameters----
 parameter_values.update({
 "Negative electrode active material volume fraction ": pybop.Parameter(initial_value=0.6),
-
 "Positive electrode active material volume fraction": pybop.Parameter(initial_value=0.6),
 })
 #---using dataset, solution and parameter values(defined above)---#
@@ -30,26 +29,19 @@ simulator = pybop.pybamm.Simulator(model,
 inputs = simulator.parameters.to_dict([0.5,0.5])
 solution =simulator.solve(inputs=inputs)
 #---Defining cost---#
-
 cost=pybop.SumOfPower(dataset)
 cost.evaluate(solution,inputs=inputs)
-
 #%% 
 # --- Problem Object appraoch--
 problem = pybop.Problem(simulator,cost)
 evaluation = problem.evaluate(inputs)
 evaluation.get_values()
-
 #%% 
 # --- creating custom loss function--with guassian noise --# 
-
 def my_cost(inputs):
     y= simulator.solve(inputs)
     solution = pybop.Solution(inputs)
     solution.set_solution_variable("Voltage [V]", data= pybop.add_noise(y["Voltage [V]"].data, 0.003),)
     return cost.evaluate(solution,inputs)
-
 my_cost(inputs)
-
-
 # %%
