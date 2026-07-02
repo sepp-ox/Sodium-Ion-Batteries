@@ -4,7 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sc
-from numpy.fft import fft, ifft, fftfreq
 from scipy.interpolate import CubicSpline,make_interp_spline
 
 def cubic(x,V):
@@ -46,6 +45,19 @@ if __name__ == "__main__":
 #plt.plot(Y,cubic(Y))
     err = quintic(evals) -cubic(evals)
 
+#---NMO CLEANING--#
+xc=np.asarray(x_clean,dtype= float).ravel()
+xc_mapped = 0.5 * xc + 0.5 
+Vc=np.asarray(V_clean,dtype= float).ravel()
+order = np.argsort(x_clean)
+xc= xc[order]
+Vc = Vc[order]
+
+def func(sto):
+    return pybamm.Interpolant(xc,Vc, sto, interpolator="cubic")
+
+
+#plt.plot(xc_mapped[::-1],Vc)
 #%%--trimming  OCV and plots
 #if V is above an upper bound, trim it
 
