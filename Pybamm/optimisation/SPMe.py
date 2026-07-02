@@ -68,7 +68,7 @@ ax[0].set_ylabel("Voltage [V]")
 ax[1].plot(sto[25:],v[25:],label ="Positive Electrode OCP")
 ax[0].plot(sto,v1,label= "Negative Electrode OCP",color = "r")
 ax[0].plot(sto,cubic(sto),label ='NMO  OCV',color = "g")
-#ax[0].plot(sto[::-1], cubic(sto))
+ax[0].plot(sto[::-1], cubic(sto))
 fig.tight_layout
 ax[2].plot(sto[25:], v1[25:]-v[25:], label = "Positive-Negative",color  ="g")
 fig.legend(loc = "upper left")
