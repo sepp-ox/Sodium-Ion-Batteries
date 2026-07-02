@@ -29,16 +29,19 @@ hero = parameter_values["Positive electrode OCP [V]"]
 #%%
 model = pybamm.lithium_ion.SPMe()
 parameter_values= pybamm.ParameterValues("Chayambuka2022")
-model.print_parameter_info()
-print(parameter_values)
-#hero = parameter_values["Negative electrode OCP [V]"]
+chayam_positive= parameter_values["Positive electrode OCP [V]"]
+chayam_negative = parameter_values["Negative electrode OCP [V]"]
+sto = np.linspace(0,1,100)
+v = np.array([float(chayam_positive(pybamm.Scalar(s)).evaluate()) for s in sto])
+v1= np.array([float(chayam_negative(pybamm.Scalar(s)).evaluate()) for s in sto])
+
+
 sto = np.linspace(0,1,100)
 def positive_electrode_func(sto):
     return func(sto) + hero(sto)
 #parameter_values["Positive electrode OCP [V]"] = positive_electrode_func
 parameter_values["Lower voltage cut-off [V]"]= 1.8
 parameter_values["Upper voltage cut-off [V]"]= 4.2
-v = np.array([float(hero(pybamm.Scalar(s)).evaluate()) for s in sto])
 #%%
 simulation = pybamm.Simulation(model,parameter_values=parameter_values)
 #%%
@@ -55,3 +58,17 @@ print("current range:", I.min(), I.max())
 #%%
 pybamm.dynamic_plot(solutions=solution,output_variables=output_variables)
 type(solution["Terminal voltage [V]"])
+
+#%% #---Comparing OCV vs OCP (+,-)
+cubic = CubicSpline(x_clean,V_clean)
+
+fig,ax= plt.subplots(1,3)
+ax[0].set_xlabel("SOC [.]")
+ax[0].set_ylabel("Voltage [V]")
+ax[1].plot(sto[25:],v[25:],label ="Positive Electrode OCP")
+ax[0].plot(sto,v1,label= "Negative Electrode OCP",color = "r")
+ax[0].plot(sto,cubic(sto),label ='NMO  OCV',color = "g")
+#ax[0].plot(sto[::-1], cubic(sto))
+fig.tight_layout
+ax[2].plot(sto[25:], v1[25:]-v[25:], label = "Positive-Negative",color  ="g")
+fig.legend(loc = "upper left")
