@@ -9,6 +9,7 @@ import pandas as pd
 from myfuncs import func
 import pprint
 from scipy.interpolate import CubicSpline,make_interp_spline
+import os
 
 
 #%%
@@ -40,6 +41,24 @@ Vc = Vc[order]
 def func(sto):
      return pybamm.Interpolant(xc_mapped,Vc[::-1], sto, interpolator="cubic")
 
+F= 98485.33212
+def  j0_nmo(ce, cs_surf, cs_max, T):
+    return  F * 3e-11 * np.sqrt(ce) * np.sqrt(cs_surf) * np.sqrt(cs_max - cs_surf)
+
+
+#%%
+print(os.listdir(r"C:\Users\sepps\OneDrive\Oxford\diss\Pybamm\data"))
+data_EIS  =pd.read_csv(r"C:\Users\sepps\OneDrive\Oxford\diss\Code\Pybamm\data\NMO_symmetrical.csv")
+print(data_EIS.head())
+print(data_EIS.columns.to_list())
+frequency  = data_EIS["frequency (Hz)"]
+Z_re = data_EIS["Z'"]
+Z_im = data_EIS["Z''"]
+print(len(Z_im))
+print(len(Z_re))
+print(frequency.max(),frequency.min())
+plt.plot(Z_re,Z_im, "o-")
+
 #%%
 #---full cell due to symettric EIS--#
 '''
@@ -53,82 +72,155 @@ Electrode cross-sectional area: 1.5e-04 m2
 Initial concentration in the electrolyte: 1 mol/m3
 Nominal cell capacity: 2.6e-03 Ah
 Separator porosity: 0.5
-Separator thickness: 2.6e-04 m
-'''
-#---THE COMMENTED OUT VALUES ARE TAKEN FROM CHAYAMBUKA2022--# OTHERWISE IT IS GALENS HALF CELL DATA APPLIED TO BOTH ELECTRODES---outdated
-dict = {"Positive electrode active material volume fraction":0.6, 
-        "Positive electrode porosity": 0.4,
-        "Positive electrode thickness [m]": 5e-05,
-        "Positive particle radius [m]": 3e-06,
-        "Positive electrode OCP [V]":func,
-        "Positive electrode Bruggeman coefficient (electrolyte)": 1.5,
-        "Positive electrode Bruggeman coefficient (electrode)": 0,
-        "Positive electrode OCP entropic change [V.K-1]": 0,
-        #"Positive electrode charge transfer coefficient ":0.5,
-        #"Positive electrode exchange-current density [A.m-2]":1,
-        "Positive electrode conductivity [S.m-1]": 50,
-        "Positive particle diffusivity [m2.s-1]":1,
-        #"Positive particle electrode diffusivity [m2.s-1]":func,
-        "Maximum concentration in positive electrode [mol.m-3]": 1, 
-        "Electrode cross-sectional area [m2]": 1.5e-04,
-        "Initial concentration in electrolyte [mol.m-3]":1,
-        "Nominal cell capacity [A.h]": 2.6e-03,
-        "Separator porosity": 0.5,
-        "Separator thickness [m]": 2.6e-04,
-        "Ambient temperature [K]": 298,
-       
-        "Negative electrode active material volume fraction":0.6, 
-        "Negative electrode porosity": 0.4,
-        "Negative electrode thickness [m]": 5e-05,
-        "Negative particle radius [m]": 3e-06,
-        "Negative electrode OCP [V]":func,
-        
-        "Initial temperature [K]":298.15,
-        
-        "Initial concentration in negative electrode [mol.m-3]":13520,
-        "Initial concentration in positive electrode [mol.m-3]":3320,
 
-        
-        "Negative electrode Bruggeman coefficient (electrolyte)": 1.5,
-        "Negative electrode Bruggeman coefficient (electrode)": 0,
-        "Negative electrode OCP entropic change [V.K-1]": 0,
-        #"Initial concentration in negative electrode [mol.m-3]":0, 
-        #"Negative electrode charge transfer coefficient ":0.5,
-        #"Negative electrode exchange-current density [A.m-2]":func,
-        "Negative electrode conductivity [S.m-1]": 50,
+
+Separator thickness: 2.6e-04 m
+ Exchange-current density for negative metal electrode [A.m-2]: 1.0e8
+
+- Negative electrode conductivity [S.m-1]: 1.0e8
+
+- Separator porosity: 0.5
+
+- Separator Bruggeman coefficient (electrolyte): 1.5
+
+- Initial concentration in electrolyte [mol.m-3]: 1000
+
+- Cation transference number: 0.4
+
+- Thermodynamic factor: 1.0
+
+- Electrolyte diffusivity [m2.s-1]: 2e-10
+
+- Electrolyte conductivity [S.m-1]: 0.88
+
+- Initial temperature [K]: 293.15
+
+- Ambient temperature [K]: 293.15
+
+- Reference temperature [K]: 293.15
+
+- Positive particle diffusivity [m2.s-1]: 1e-14
+
+- Positive electrode reaction rate constant [m2.5 mol-0.5 s-1]: 3e-11
+
+- Positive electrode conductivity [S.m-1]: 22.8
+
+- Positive electrode Bruggeman coefficient (electrode): 0.0
+
+- Positive electrode Bruggeman coefficient (electrolyte): 1.875
+
+- Maximum concentration in positive electrode [mol.m-3]: 3.6e4
+
+- Initial concentration in positive electrode [mol.m-3]: 1.9e4
+
+- For charge initialization, use the near-fully-lithiated NMO value:
+  Initial concentration in positive electrode [mol.m-3] = 0.994761 * 3.6e4 = 35811.396
+
+- NMO stoichiometry window:
+  x at 2.3 V: 1.000000
+  x at 3.6 V: 0.527778
+  Delta x: 0.472222
+
+- Positive electrode OCP entropic change [V.K-1]: 0.0
+
+- Positive electrode exchange-current density [A.m-2]: j0_nmo
+
+- j0_nmo function:
+  j0_nmo(ce, cs_surf, cs_max, T) = F * 3e-11 * sqrt(ce) * sqrt(cs_surf) * sqrt(cs_max - cs_surf)
+
+- Lower voltage cut-off [V]: 2.3
+
+- Upper voltage cut-off [V]: 3.6
+
+- Contact resistance [Ohm]: 12
+"Initial concentration in negative electrode [mol.m-3]":35811.396,
+        "Initial concentration in positive electrode [mol.m-3]":35811.396,
+        "Negative electrode conductivity [S.m-1]": 22.8,
+        "Positive electrode conductivity [S.m-1]": 22.8,
+        "Positive electrode exchange-current density [A.m-2]":j0_nmo,
+        "Negative electrode exchange-current density [A.m-2]":j0_nmo,
+        "Maximum concentration in negative electrode [mol.m-3]": 3.6e4,
+        "Maximum concentration in positive electrode [mol.m-3]": 3.6e4,
+
+'''
+x_mid = (1+0.528)/2
+c_init = x_mid * 3.6e4
+dict = { 
+       #PARTICLE
+        "Negative particle radius [m]": 3e-06,
+        "Positive particle radius [m]": 3e-06,
         "Negative particle diffusivity [m2.s-1]":1,
-        #"Negative particle electrode diffusivity [m2.s-1]":func,
-        "Maximum concentration in negative electrode [mol.m-3]": 1,
-        
+        "Positive particle diffusivity [m2.s-1]":1,
+        #TEMPERATURE
+        "Initial temperature [K]":298.15,
+        "Ambient temperature [K]": 293.15,
+        "Reference temperature [K]":293.15,
+        #ELECTRODE DATA
+        "Initial concentration in negative electrode [mol.m-3]":c_init,
+        "Initial concentration in positive electrode [mol.m-3]":c_init,
+        "Negative electrode conductivity [S.m-1]": 22.8,
+        "Positive electrode conductivity [S.m-1]": 22.8,
+        "Positive electrode exchange-current density [A.m-2]":j0_nmo,
+        "Negative electrode exchange-current density [A.m-2]":j0_nmo,
+        "Maximum concentration in negative electrode [mol.m-3]": 3.6e4,
+        "Maximum concentration in positive electrode [mol.m-3]": 3.6e4,
+        "Negative electrode porosity": 0.4,
+        "Positive electrode porosity": 0.4,
+        "Negative electrode thickness [m]": 5e-05,
+        "Positive electrode thickness [m]": 5e-05,
+        "Negative electrode Bruggeman coefficient (electrode)": 0,
+        "Positive electrode Bruggeman coefficient (electrode)": 0,
+        "Negative electrode OCP entropic change [V.K-1]": 0,
+        "Positive electrode OCP entropic change [V.K-1]": 0,
+        "Negative electrode OCP [V]":func,
+        "Positive electrode OCP [V]":func,
+        "Negative electrode thickness [m]": 5e-05,
+        "Positive electrode thickness [m]": 5e-05,
+        "Negative electrode active material volume fraction":0.6, 
+        "Positive electrode active material volume fraction":0.6,
         "Electrode height [m]": 0.000254,
         "Electrode width [m]":0.001,
-         
-        "Reference temperature [K]": 298.15,
+        "Electrode cross-sectional area [m2]": 1.5e-04,
+       #ELECTROLYTE DATA
+        "Electrolyte conductivity [S.m-1]":1e-8,
+        "Electrolyte diffusivity [m2.s-1]":2e-10,
+        "Initial concentration in electrolyte [mol.m-3]":1,
+        "Negative electrode Bruggeman coefficient (electrolyte)": 1.875,
+        "Positive electrode Bruggeman coefficient (electrolyte)": 1.875,
+        #SEPARATOR
+        "Separator porosity": 0.5,
+        "Separator thickness [m]": 2.6e-04,
+        "Separator Bruggeman coefficient (electrolyte)":1.5,
+        #MISC
+        "Thermodynamic factor":1,
+        "Cation transference number": 0.4,
+        "Current function [A]":0.003,
+         "Nominal cell capacity [A.h]": 2.6e-03,
         "Number of cells connected in series to make a battery":1,
         "Number of electrodes connected in parallel to make a cell":1,
-        "Separator Bruggeman coefficient (electrolyte)":1.5,
-        "Lower voltage cut-off [V]":2 ,
-        "Upper voltage cut-off [V]":4,
-        "Thermodynamic factor":1,
-        "Cation transference number": 0.5,
-        "Electrolyte conductivity [S.m-1]":100,
-        "Current function [A]":0.003,
-         "Electrolyte diffusivity [m2.s-1]":1,
-         "Positive electrode exchange-current density [A.m-2]":1,
-         "Negative electrode exchange-current density [A.m-2]":1,
+        "Lower voltage cut-off [V]":2.3 ,
+        "Upper voltage cut-off [V]":3.6,
+        #GUESSES
+        "Negative electrode double-layer capacity [F.m-2]":10,
+        "Positive electrode double-layer capacity [F.m-2]":10,
+        "Contact resistance [Ohm]": 12,
+        #
         }
 
-experiment=pybamm.Experiment(["Charge at 0.03 A for 1 hour"])
-model = pybamm.lithium_ion.DFN()
-model.print_parameter_info()
+model = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
 #parameter_values = pybamm.ParameterValues("Chayambuka2022")
-parameter_values = pybamm.ParameterValues(dict)
 #parameter_values.update(dict)
-#print(parameter_values)
-sim = pybamm.Simulation(model,parameter_values=parameter_values)
-sol = sim.solve([0,3600])
-output_variables = ["Voltage [V]", "Electrolyte concentration [mol.m-3]"]
-pybamm.dynamic_plot(sol,output_variables=output_variables)
+parameter_values= pybamm.ParameterValues(dict)
+eis_sim = pybamm.EISSimulation(model,parameter_values=parameter_values)
+
+frequencies = np.logspace(-2,5,141)
+
+result = eis_sim.solve(frequencies)
+
+Z_re = result["Z_re [Ohm]"]
+Z_im = result["Z_im [Ohm]"]
+print(Z_re,Z_im)
+''''
 chayam_positive= parameter_values["Positive electrode OCP [V]"]
 chayam_negative = parameter_values["Negative electrode OCP [V]"]
 chayam_parameter = parameter_values["Positive electrode exchange-current density [A.m-2]"]
@@ -141,25 +233,14 @@ v1= np.array([float(chayam_negative(pybamm.Scalar(s)).evaluate()) for s in sto])
 #plt.plot(sto,v,label = "positive")
 #plt.plot(sto,v1,label = "negative")
 plt.plot(sto,v2)
-plt.legend()
+plt.legend()'''
+
+plt.plot(Z_re,-Z_im)
 #%%
 
-esi_sim = pybamm.EISSimulation(model,parameter_values=parameter_values)
-
-frequencies = np.logspace(-4,4,30)
-
-
-
-
-
-# %%
-
-
-
-model = pybamm.lithium_ion.DFN()
-parameter_values = pybamm.ParameterValues("Chayambuka2022")
-sim = pybamm.Simulation(model = model, parameter_values=parameter_values)
-sol =sim.solve([0,3600])
-pybamm.dynamic_plot(sol, output_variables=output_variables)
-
+#thoughts;
+#----Electrolyte diffusivity: very sensitive for overall shape
+#doulbe layer capacity: sensitive for the semicircle
+# Electrolyte conductivity
+# 
 
