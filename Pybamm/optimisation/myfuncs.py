@@ -46,16 +46,15 @@ if __name__ == "__main__":
     err = quintic(evals) -cubic(evals)
 
 #---NMO CLEANING--#
-xc=np.asarray(x_clean,dtype= float).ravel()
-xc_mapped = 0.5 * xc + 0.5 
-Vc=np.asarray(V_clean,dtype= float).ravel()
-order = np.argsort(x_clean)
-xc= xc[order]
-Vc = Vc[order]
-
+    xc=np.asarray(x_clean,dtype= float).ravel()
+    xc_mapped = 0.5 * xc + 0.5 
+    Vc=np.asarray(V_clean,dtype= float).ravel()
+    order = np.argsort(x_clean)
+    xc_mapped= xc[order]
+    Vc = Vc[order]
+    
 def func(sto):
-    return pybamm.Interpolant(xc,Vc, sto, interpolator="cubic")
-
+     return pybamm.Interpolant(xc_mapped,Vc, sto, interpolator="cubic")
 
 #plt.plot(xc_mapped[::-1],Vc)
 #%%--trimming  OCV and plots
