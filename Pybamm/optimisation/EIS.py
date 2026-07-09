@@ -40,12 +40,11 @@ xc_mapped= xc[order]
 Vc = Vc[order]
 
 def func(sto):
-     return pybamm.Interpolant(xc_mapped,Vc[::-1], sto, interpolator="cubic")
+     return pybamm.Interpolant(xc_mapped,Vc, sto, interpolator="cubic")
 
 F= 98485.33212
 def  j0_nmo(ce, cs_surf, cs_max, T):
     return  F * 3e-11 * np.sqrt(ce) * np.sqrt(cs_surf) * np.sqrt(cs_max - cs_surf)
-
 
 #%%
 print(os.listdir(r"C:\Users\sepps\OneDrive\Oxford\diss\Pybamm\data"))
@@ -55,107 +54,10 @@ print(data_EIS.columns.to_list())
 data_frequency  = data_EIS["frequency (Hz)"]
 data_Z_re = data_EIS["Z'"]
 data_Z_im = data_EIS["Z''"]
-
 #%%
-#---full cell due to symettric EIS--#
-'''
-Positive electrode active material volume fraction: 0.6
-Positive electrode porosity: 0.4
-Positive electrode thickness: 5e-05 m 
-Positive particle radius: 3e-06 m
-Mode of operation: Half cell
-Ambient temperature: 298 K
-Electrode cross-sectional area: 1.5e-04 m2
-Initial concentration in the electrolyte: 1 mol/m3
-Nominal cell capacity: 2.6e-03 Ah
-Separator porosity: 0.5
-
-
-Separator thickness: 2.6e-04 m
- Exchange-current density for negative metal electrode [A.m-2]: 1.0e8
-
-- Negative electrode conductivity [S.m-1]: 1.0e8
-
-- Separator porosity: 0.5
-
-- Separator Bruggeman coefficient (electrolyte): 1.5
-
-- Initial concentration in electrolyte [mol.m-3]: 1000
-
-- Cation transference number: 0.4
-
-- Thermodynamic factor: 1.0
-
-- Electrolyte diffusivity [m2.s-1]: 2e-10
-
-- Electrolyte conductivity [S.m-1]: 0.88
-
-- Initial temperature [K]: 293.15
-
-- Ambient temperature [K]: 293.15
-
-- Reference temperature [K]: 293.15
-
-- Positive particle diffusivity [m2.s-1]: 1e-14
-
-- Positive electrode reaction rate constant [m2.5 mol-0.5 s-1]: 3e-11
-
-- Positive electrode conductivity [S.m-1]: 22.8
-
-- Positive electrode Bruggeman coefficient (electrode): 0.0
-
-- Positive electrode Bruggeman coefficient (electrolyte): 1.875
-
-- Maximum concentration in positive electrode [mol.m-3]: 3.6e4
-
-- Initial concentration in positive electrode [mol.m-3]: 1.9e4
-
-- For charge initialization, use the near-fully-lithiated NMO value:
-  Initial concentration in positive electrode [mol.m-3] = 0.994761 * 3.6e4 = 35811.396
-
-- NMO stoichiometry window:
-  x at 2.3 V: 1.000000
-  x at 3.6 V: 0.527778
-  Delta x: 0.472222
-
-- Positive electrode OCP entropic change [V.K-1]: 0.0
-
-- Positive electrode exchange-current density [A.m-2]: j0_nmo
-
-- j0_nmo function:
-  j0_nmo(ce, cs_surf, cs_max, T) = F * 3e-11 * sqrt(ce) * sqrt(cs_surf) * sqrt(cs_max - cs_surf)
-
-- Lower voltage cut-off [V]: 2.3
-
-- Upper voltage cut-off [V]: 3.6
-
-- Contact resistance [Ohm]: 12
-"Initial concentration in negative electrode [mol.m-3]":35811.396,
-        "Initial concentration in positive electrode [mol.m-3]":35811.396,
-        "Negative electrode conductivity [S.m-1]": 22.8,
-        "Positive electrode conductivity [S.m-1]": 22.8,
-        "Positive electrode exchange-current density [A.m-2]":j0_nmo,
-        "Negative electrode exchange-current density [A.m-2]":j0_nmo,
-        "Maximum concentration in negative electrode [mol.m-3]": 3.6e4,
-        "Maximum concentration in positive electrode [mol.m-3]": 3.6e4,
-
-chayam_positive= parameter_values["Positive electrode OCP [V]"]
-chayam_negative = parameter_values["Negative electrode OCP [V]"]
-chayam_parameter = parameter_values["Positive electrode exchange-current density [A.m-2]"]
-sto = np.linspace(0,1,100)
-t=1000
-m=10
-v= np.array([float(chayam_positive(pybamm.Scalar(s)).evaluate()) for s in sto])
-v2 = np.array([float(chayam_parameter(pybamm.Scalar(s),pybamm.Scalar(m),pybamm.Scalar(t),pybamm.Scalar(298.15)).evaluate()) for s in sto])
-v1= np.array([float(chayam_negative(pybamm.Scalar(s)).evaluate()) for s in sto])
-#plt.plot(sto,v,label = "positive")
-#plt.plot(sto,v1,label = "negative")
-plt.plot(sto,v2)
-plt.legend()
-'''
 x_mid = (1+0.528)/2
 c_init = x_mid * 3.6e4
-dict = { 
+dictionary = { 
        #PARTICLE
         "Negative particle radius [m]": 3e-06,
         "Positive particle radius [m]": 3e-06,
@@ -217,15 +119,15 @@ dict = {
         #
         }
 model = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
-parameter_values= pybamm.ParameterValues(dict)
+parameter_values= pybamm.ParameterValues(dictionary)
 eis_sim = pybamm.EISSimulation(model,parameter_values=parameter_values)
-frequencies = np.logspace(-5,5,140)
+frequencies = np.logspace(-5,5,200)
 result = eis_sim.solve(frequencies)
-print(list(result.data.keys()))
+print(list(result.data.keys())) 
 Z_re = result["Z_re [Ohm]"]
 Z_im = result["Z_im [Ohm]"]
 freq= result["Frequency [Hz]"]
-plt.plot(Z_re,-Z_im)
+plt.plot(Z_re,Z_im)
 
 #%%--setting up synthetic data---
 model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
@@ -245,7 +147,7 @@ parameter_values.update({
     "Negative electrode double-layer capacity [F.m-2]":pybop.Parameter(pybop.Gaussian(10,2.5,truncated_at=[0.1,100])),
     "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(10,2.5,truncated_at=[0.1,100])),
     "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-12,5e-11,truncated_at = [1e-15,1e-4]),transformation = pybop.LogTransformation(), initial_value = 1e-11),
-    "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1e-8,5e-09,truncated_at = [1e-10,1]),transformation = pybop.LogTransformation(), initial_value = 1e-7)
+   "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1e-8,5e-09,truncated_at = [1e-10,1]),transformation = pybop.LogTransformation(), initial_value = 1e-7)
     })
 model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
 simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
@@ -253,7 +155,7 @@ simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_va
 
 #%%
 cost= pybop.SumSquaredError(synthetic_dataset,target="Impedance",weighting = "domain")
-cost.weighting = cost.weighting / np.abs(Z) **2 
+#cost.weighting = cost.weighting / np.abs(Z) **2 
 problem = pybop.Problem(simulator,cost)
 problem.set_target("Impedance")
 #%%
@@ -268,23 +170,197 @@ result = optim.run()
 print(result)
 
 
-#%%
-1.46461269e+01
-#%%
-'''High frequency (kHz range)
-Ohmic resistance R₀ — electrolyte conductivity, separator, contact resistance
-Electrolyte conductivity [S.m-1]
-Separator thickness [m], Separator porosity
-Mid frequency (Hz range — semicircle)
-Charge transfer resistance — Butler-Volmer kinetics
-Positive/Negative electrode exchange-current density [A.m-2]
-Double layer capacitance
-Positive/Negative electrode double-layer capacity [F.m-2]
-Low frequency (mHz range — Warburg tail)
-Solid-state diffusion
-Positive/Negative particle diffusivity [m2.s-1]
-Electrolyte diffusion
-Electrolyte diffusivity [m2.s-1]'''               
+#%% SENSITIVITY ANALYSIS
+
+# ---— Sensitivity screening: which parameters actually move the impedance?
+# =============================================================================
+ 
+def eis_sensitivity_screen(base_parameter_values, params_to_test, frequencies,
+                           factor=2.0, model_options=None, plot=True):
+    """
+    One-at-a-time (OAT) sensitivity screen for EIS.
+ 
+    For each parameter p, the impedance spectrum is recomputed with p*factor
+    and p/factor (everything else held at its base value). The sensitivity
+    index is the mean relative change of the complex impedance across the
+    spectrum, normalised per decade of parameter change:
+ 
+        S = mean_f( |Z_perturbed(f) - Z_base(f)| / |Z_base(f)| ) / |log10(factor)|
+ 
+    S ~ 0        -> parameter is invisible to EIS, exclude from optimisation
+    S >~ 0.05    -> parameter noticeably shapes the spectrum, worth fitting
+ 
+    Parameters
+    ----------
+    base_parameter_values : pybamm.ParameterValues
+        Your full baseline parameter set (plain floats, no pybop.Parameters).
+    params_to_test : list[str]
+        Names of the parameters to screen.
+    frequencies : np.ndarray
+        Frequency array [Hz].
+    factor : float
+        Multiplicative perturbation (default 2.0 -> tests p/2 and 2p).
+    model_options : dict
+        Options for the DFN model (default {"surface form": "differential"}).
+    plot : bool
+        If True, produce a bar chart of S and Nyquist overlays.
+ 
+    Returns
+    -------
+    dict {parameter name: sensitivity index S}, sorted descending.
+    """
+    model_options = model_options or {"surface form": "differential"}
+    frequencies = np.asarray(frequencies, dtype=float)
+ 
+    def run_eis(pvals):
+        """Build a fresh model + simulator and return complex Z(f)."""
+        m = pybamm.lithium_ion.DFN(options=model_options)
+        sim = pybop.pybamm.EISSimulator(
+            m, parameter_values=pvals, f_eval=frequencies
+        )
+        sol = sim.solve()
+        return np.asarray(sol["Impedance"].data)
+ 
+    # Baseline spectrum
+    Z_base = run_eis(base_parameter_values.copy())
+    absZ = np.abs(Z_base)
+ 
+    sensitivities = {}
+    spectra = {}  # keep perturbed spectra for the Nyquist overlay plot
+ 
+    for name in params_to_test:
+        base_val = base_parameter_values[name]
+        S_vals = []
+        spectra[name] = []
+        for f in (factor, 1.0 / factor):
+            pvals = base_parameter_values.copy()
+            pvals[name] = base_val * f
+            try:
+                Z_pert = run_eis(pvals)
+                rel_change = np.mean(np.abs(Z_pert - Z_base) / absZ)
+                S_vals.append(rel_change / abs(np.log10(factor)))
+                spectra[name].append((f, Z_pert))
+            except Exception as err:
+                print(f"  [warn] {name} x{f:g} failed to solve: {err}")
+        sensitivities[name] = float(np.mean(S_vals)) if S_vals else np.nan
+        print(f"{name}: S = {sensitivities[name]:.4g}")
+ 
+    # Sort descending
+    sensitivities = dict(
+        sorted(sensitivities.items(), key=lambda kv: -np.nan_to_num(kv[1]))
+    )
+ 
+    if plot:
+        # --- Bar chart of sensitivity indices ---
+        fig, ax = plt.subplots(figsize=(8, 0.45 * len(sensitivities) + 1.5))
+        names = list(sensitivities.keys())
+        vals = [sensitivities[n] for n in names]
+        ax.barh(names[::-1], vals[::-1])
+        ax.set_xlabel(
+            "Sensitivity index S (mean relative |Z| change per decade)"
+        )
+        ax.set_title(f"EIS parameter sensitivity (x{factor:g} perturbation)")
+        ax.set_xscale("log")
+        plt.tight_layout()
+        plt.show()
+ 
+        # --- Nyquist overlays for the top 4 most sensitive parameters ---
+        top = [n for n in names if np.isfinite(sensitivities[n])][:4]
+        if top:
+            fig, axes = plt.subplots(
+                1, len(top), figsize=(4.5 * len(top), 4), squeeze=False
+            )
+            for ax, name in zip(axes[0], top):
+                ax.plot(Z_base.real, -Z_base.imag, "k-", lw=2, label="base")
+                for f, Zp in spectra[name]:
+                    ax.plot(Zp.real, -Zp.imag, "--", label=f"x{f:g}")
+                ax.set_xlabel(r"$Z_{re}$ [$\Omega$]")
+                ax.set_ylabel(r"$-Z_{im}$ [$\Omega$]")
+                ax.set_title(name, fontsize=8)
+                ax.legend(fontsize=7)
+                ax.axis("equal")
+            plt.tight_layout()
+            
+            plt.show()
+ 
+    return sensitivities
+ 
+ 
+
+  
+# ---- Example usage ----------------------------------------------------------
+parameter_values = pybamm.ParameterValues(dictionary)
+parameter_values_tested = { 
+       #PARTICLE
+        "Negative particle radius [m]": 3e-06,
+        "Positive particle radius [m]": 3e-06,
+        "Negative particle diffusivity [m2.s-1]":1,
+        "Positive particle diffusivity [m2.s-1]":1,
+        #TEMPERATURE
+        "Initial temperature [K]":298.15,
+        "Ambient temperature [K]": 293.15,
+        "Reference temperature [K]":293.15,
+        #ELECTRODE DATA
+        "Initial concentration in negative electrode [mol.m-3]":c_init,
+        "Initial concentration in positive electrode [mol.m-3]":c_init,
+        "Negative electrode conductivity [S.m-1]": 22.8,
+        "Positive electrode conductivity [S.m-1]": 22.8,
+        #"Positive electrode exchange-current density [A.m-2]":j0_nmo,
+        #"Negative electrode exchange-current density [A.m-2]":j0_nmo,
+        "Maximum concentration in negative electrode [mol.m-3]": 3.6e4,
+        "Maximum concentration in positive electrode [mol.m-3]": 3.6e4,
+        "Negative electrode porosity": 0.4,
+        "Positive electrode porosity": 0.4,
+        "Negative electrode thickness [m]": 5e-05,
+        "Positive electrode thickness [m]": 5e-05,
+        "Negative electrode Bruggeman coefficient (electrode)": 0,
+        "Positive electrode Bruggeman coefficient (electrode)": 0,
+        "Negative electrode OCP entropic change [V.K-1]": 0,
+        "Positive electrode OCP entropic change [V.K-1]": 0,
+        #"Negative electrode OCP [V]":func,
+        #"Positive electrode OCP [V]":func,
+        "Negative electrode thickness [m]": 5e-05,
+        "Positive electrode thickness [m]": 5e-05,
+        "Negative electrode active material volume fraction":0.6, 
+        "Positive electrode active material volume fraction":0.6,
+        "Electrode height [m]": 0.000254,
+        "Electrode width [m]":0.001,
+        "Electrode cross-sectional area [m2]": 1.5e-04,
+       #ELECTROLYTE DATA
+        "Electrolyte conductivity [S.m-1]":1e-8,
+        "Electrolyte diffusivity [m2.s-1]":2e-10,
+        "Initial concentration in electrolyte [mol.m-3]":1,
+        "Negative electrode Bruggeman coefficient (electrolyte)": 1.875,
+        "Positive electrode Bruggeman coefficient (electrolyte)": 1.875,
+        #SEPARATOR
+        "Separator porosity": 0.5,
+        "Separator thickness [m]": 2.6e-04,
+        "Separator Bruggeman coefficient (electrolyte)":1.5,
+        #MISC
+        "Thermodynamic factor":1,
+        "Cation transference number": 0.4,
+        "Current function [A]":0.003,
+         "Nominal cell capacity [A.h]": 2.6e-03,
+        "Number of cells connected in series to make a battery":1,
+        "Number of electrodes connected in parallel to make a cell":1,
+        "Lower voltage cut-off [V]":2.3 ,
+        "Upper voltage cut-off [V]":3.6,
+        #GUESSES
+        "Negative electrode double-layer capacity [F.m-2]":10,
+        "Positive electrode double-layer capacity [F.m-2]":10,
+        "Contact resistance [Ohm]": 12,
+        }
+#
+S = eis_sensitivity_screen(
+     base_parameter_values=parameter_values,  # your baseline dict
+     params_to_test=parameter_values_tested,
+     frequencies=np.logspace(-2, 5, 71),   # coarser grid = faster screening
+     factor=2.0,
+ )
+
+ # Parameters worth optimising:
+worth_fitting = [k for k, v in S.items() if v > 0.05]
+print("Include in optimisation:", worth_fitting)
 #settting up optimisation procedure and cost functio
 #thoughts;
 #----Electrolyte diffusivity: very sensitive for overall shape
@@ -293,4 +369,36 @@ Electrolyte diffusivity [m2.s-1]'''
  
 # %%
 
+print(problem.parameters.names)
+param_names=  [""]
+def results_to_latex(param_names, true_values, opt_values,
+                     caption="Optimised parameter values against ground truth.",
+                     label="tab:opt_results"):
+    """
+    Prints a LaTeX (booktabs) table: parameter | true value | optimised value
+    | relative error [%]. Copy the printed output straight into Overleaf.
+ 
+    Add \\usepackage{booktabs} and \\usepackage{siunitx} to your preamble.
+    """
+    lines = [
+        r"\begin{table}[htbp]",
+        r"\centering",
+        rf"\caption{{{caption}}}",
+        rf"\label{{{label}}}",
+        r"\begin{tabular}{lccc}",
+        r"\toprule",
+        r"Parameter & True value & Optimised value & Error [\%] \\",
+        r"\midrule",
+    ]
+    for name, true, opt in zip(param_names, true_values, opt_values):
+        err = 100.0 * abs(opt - true) / abs(true)
+        # \num{} (siunitx) renders 2e-10 as 2 x 10^-10 automatically
+        lines.append(
+            rf"{name} & \num{{{true:.4g}}} & \num{{{opt:.4g}}} & {err:.2f} \\"
+        )
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    latex = "\n".join(lines)
+    print(latex)
+    return latex
+ 
 
