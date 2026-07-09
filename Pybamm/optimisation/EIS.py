@@ -219,66 +219,78 @@ dict = {
 model = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
 parameter_values= pybamm.ParameterValues(dict)
 eis_sim = pybamm.EISSimulation(model,parameter_values=parameter_values)
-frequencies = np.logspace(-2,5,141)
-
+frequencies = np.logspace(-5,5,140)
 result = eis_sim.solve(frequencies)
+print(list(result.data.keys()))
 Z_re = result["Z_re [Ohm]"]
 Z_im = result["Z_im [Ohm]"]
-print(Z_re,Z_im)
+freq= result["Frequency [Hz]"]
 plt.plot(Z_re,-Z_im)
 
+#%%--setting up synthetic data---
+model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
+simulator_syn = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
+solution= simulator_syn.solve()
+Z =solution["Impedance"].data
 
 #%% Running Pybop 
 #%%
-dataset = pybop.Dataset({"Frequency [Hz]": np.asarray(data_frequency),"Z_re [Ohm]": np.asarray(data_Z_re),"Z_im [Ohm]":np.asarray(data_Z_im)},domain = "Frequency [Hz]")
-'''parameter_values.update({
-    "Negative electrode double-layer capacity [F.m-2]":pybop.Parameter(pybop.Gaussian(5,2.5,truncated_at = [0.1,20])),
-    "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(5,2.5,truncated_at=[0.1,20])),
-    "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(np.log(1e-12),1,truncated_at = [1e-15,1e-4]),transformation = pybop.LogTransformation())})'''
-simulator = pybop.pybamm.EISSimulator(model,parameter_values= parameter_values, f_eval= data_frequency)
-print(dir(simulator)) 
+Impedance_data =   np.asarray(data_Z_re,dtype=float ) - 1j * np.asarray(data_Z_im, dtype= float)
+synthetic_Impedance =np.asarray(Z_re,dtype=float ) - 1j * np.asarray(Z_im, dtype= float)
+
+dataset = pybop.Dataset({"Frequency [Hz]": np.asarray(data_frequency),
+                         "Impedance": Impedance_data},domain = "Frequency [Hz]")
+synthetic_dataset = pybop.Dataset({"Frequency [Hz]": np.asarray(frequencies),"Impedance": Z}, domain = "Frequency [Hz]")
+parameter_values.update({
+    "Negative electrode double-layer capacity [F.m-2]":pybop.Parameter(pybop.Gaussian(10,2.5,truncated_at=[0.1,100])),
+    "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(10,2.5,truncated_at=[0.1,100])),
+    "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-12,5e-11,truncated_at = [1e-15,1e-4]),transformation = pybop.LogTransformation(), initial_value = 1e-11),
+    "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1e-8,5e-09,truncated_at = [1e-10,1]),transformation = pybop.LogTransformation(), initial_value = 1e-7)
+    })
+model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
+simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
 #print([p for p in dir(pybop) if "cost" in p.lower() or "error" in p.lower() or "impedance" in p.lower() or "eis" in p.lower()])
-#setting up the cost function#
-# build the problem with your EIS simulator, parameters, and dataset
-# use the custom EIS cost instead of SumSquaredError
-# gradient-free optimiser (EIS has no gradients)
 
 #%%
-
-
-#%%
-cost= pybop.SumSquaredError(dataset,target=["Z_re [Ohm]", "Z_im [Ohm]"],weighting = "domain")
+cost= pybop.SumSquaredError(synthetic_dataset,target="Impedance",weighting = "domain")
+cost.weighting = cost.weighting / np.abs(Z) **2 
 problem = pybop.Problem(simulator,cost)
+problem.set_target("Impedance")
+#%%
+print(problem.parameters.names)
+x_true = [1e-8, 2e-10,10,10]
+print("cost at truth", problem(x_true))
+#%%
 optim = pybop.CMAES(problem)
 optim.set_max_iterations(150)
+optim.set_max_unchanged_iterations(40)
 result = optim.run()
-'''High frequency (kHz range)
+print(result)
 
+
+#%%
+1.46461269e+01
+#%%
+'''High frequency (kHz range)
 Ohmic resistance R₀ — electrolyte conductivity, separator, contact resistance
 Electrolyte conductivity [S.m-1]
 Separator thickness [m], Separator porosity
-
 Mid frequency (Hz range — semicircle)
-
 Charge transfer resistance — Butler-Volmer kinetics
 Positive/Negative electrode exchange-current density [A.m-2]
 Double layer capacitance
 Positive/Negative electrode double-layer capacity [F.m-2]
-
 Low frequency (mHz range — Warburg tail)
-
 Solid-state diffusion
 Positive/Negative particle diffusivity [m2.s-1]
 Electrolyte diffusion
 Electrolyte diffusivity [m2.s-1]'''               
-
 #settting up optimisation procedure and cost functio
-
 #thoughts;
 #----Electrolyte diffusivity: very sensitive for overall shape
 #doulbe layer capacity: sensitive for the semicircle
 # Electrolyte conductivity
-# 
-
-
+ 
 # %%
+
+
