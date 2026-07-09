@@ -10,6 +10,7 @@ from myfuncs import func
 import pprint
 from scipy.interpolate import CubicSpline,make_interp_spline
 import os
+from pybop.costs.base_cost import BaseCost
 
 
 #%%
@@ -51,13 +52,9 @@ print(os.listdir(r"C:\Users\sepps\OneDrive\Oxford\diss\Pybamm\data"))
 data_EIS  =pd.read_csv(r"C:\Users\sepps\OneDrive\Oxford\diss\Code\Pybamm\data\NMO_symmetrical.csv")
 print(data_EIS.head())
 print(data_EIS.columns.to_list())
-frequency  = data_EIS["frequency (Hz)"]
-Z_re = data_EIS["Z'"]
-Z_im = data_EIS["Z''"]
-print(len(Z_im))
-print(len(Z_re))
-print(frequency.max(),frequency.min())
-plt.plot(Z_re,Z_im, "o-")
+data_frequency  = data_EIS["frequency (Hz)"]
+data_Z_re = data_EIS["Z'"]
+data_Z_im = data_EIS["Z''"]
 
 #%%
 #---full cell due to symettric EIS--#
@@ -142,6 +139,19 @@ Separator thickness: 2.6e-04 m
         "Maximum concentration in negative electrode [mol.m-3]": 3.6e4,
         "Maximum concentration in positive electrode [mol.m-3]": 3.6e4,
 
+chayam_positive= parameter_values["Positive electrode OCP [V]"]
+chayam_negative = parameter_values["Negative electrode OCP [V]"]
+chayam_parameter = parameter_values["Positive electrode exchange-current density [A.m-2]"]
+sto = np.linspace(0,1,100)
+t=1000
+m=10
+v= np.array([float(chayam_positive(pybamm.Scalar(s)).evaluate()) for s in sto])
+v2 = np.array([float(chayam_parameter(pybamm.Scalar(s),pybamm.Scalar(m),pybamm.Scalar(t),pybamm.Scalar(298.15)).evaluate()) for s in sto])
+v1= np.array([float(chayam_negative(pybamm.Scalar(s)).evaluate()) for s in sto])
+#plt.plot(sto,v,label = "positive")
+#plt.plot(sto,v1,label = "negative")
+plt.plot(sto,v2)
+plt.legend()
 '''
 x_mid = (1+0.528)/2
 c_init = x_mid * 3.6e4
@@ -206,37 +216,63 @@ dict = {
         "Contact resistance [Ohm]": 12,
         #
         }
-
 model = pybamm.lithium_ion.DFN(options = {"surface form":"differential"})
-#parameter_values = pybamm.ParameterValues("Chayambuka2022")
-#parameter_values.update(dict)
 parameter_values= pybamm.ParameterValues(dict)
 eis_sim = pybamm.EISSimulation(model,parameter_values=parameter_values)
-
 frequencies = np.logspace(-2,5,141)
 
 result = eis_sim.solve(frequencies)
-
 Z_re = result["Z_re [Ohm]"]
 Z_im = result["Z_im [Ohm]"]
 print(Z_re,Z_im)
-''''
-chayam_positive= parameter_values["Positive electrode OCP [V]"]
-chayam_negative = parameter_values["Negative electrode OCP [V]"]
-chayam_parameter = parameter_values["Positive electrode exchange-current density [A.m-2]"]
-sto = np.linspace(0,1,100)
-t=1000
-m=10
-v= np.array([float(chayam_positive(pybamm.Scalar(s)).evaluate()) for s in sto])
-v2 = np.array([float(chayam_parameter(pybamm.Scalar(s),pybamm.Scalar(m),pybamm.Scalar(t),pybamm.Scalar(298.15)).evaluate()) for s in sto])
-v1= np.array([float(chayam_negative(pybamm.Scalar(s)).evaluate()) for s in sto])
-#plt.plot(sto,v,label = "positive")
-#plt.plot(sto,v1,label = "negative")
-plt.plot(sto,v2)
-plt.legend()'''
-
 plt.plot(Z_re,-Z_im)
+
+
+#%% Running Pybop 
 #%%
+dataset = pybop.Dataset({"Frequency [Hz]": np.asarray(data_frequency),"Z_re [Ohm]": np.asarray(data_Z_re),"Z_im [Ohm]":np.asarray(data_Z_im)},domain = "Frequency [Hz]")
+'''parameter_values.update({
+    "Negative electrode double-layer capacity [F.m-2]":pybop.Parameter(pybop.Gaussian(5,2.5,truncated_at = [0.1,20])),
+    "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(5,2.5,truncated_at=[0.1,20])),
+    "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(np.log(1e-12),1,truncated_at = [1e-15,1e-4]),transformation = pybop.LogTransformation())})'''
+simulator = pybop.pybamm.EISSimulator(model,parameter_values= parameter_values, f_eval= data_frequency)
+print(dir(simulator)) 
+#print([p for p in dir(pybop) if "cost" in p.lower() or "error" in p.lower() or "impedance" in p.lower() or "eis" in p.lower()])
+#setting up the cost function#
+# build the problem with your EIS simulator, parameters, and dataset
+# use the custom EIS cost instead of SumSquaredError
+# gradient-free optimiser (EIS has no gradients)
+
+#%%
+
+
+#%%
+cost= pybop.SumSquaredError(dataset,target=["Z_re [Ohm]", "Z_im [Ohm]"],weighting = "domain")
+problem = pybop.Problem(simulator,cost)
+optim = pybop.CMAES(problem)
+optim.set_max_iterations(150)
+result = optim.run()
+'''High frequency (kHz range)
+
+Ohmic resistance R₀ — electrolyte conductivity, separator, contact resistance
+Electrolyte conductivity [S.m-1]
+Separator thickness [m], Separator porosity
+
+Mid frequency (Hz range — semicircle)
+
+Charge transfer resistance — Butler-Volmer kinetics
+Positive/Negative electrode exchange-current density [A.m-2]
+Double layer capacitance
+Positive/Negative electrode double-layer capacity [F.m-2]
+
+Low frequency (mHz range — Warburg tail)
+
+Solid-state diffusion
+Positive/Negative particle diffusivity [m2.s-1]
+Electrolyte diffusion
+Electrolyte diffusivity [m2.s-1]'''               
+
+#settting up optimisation procedure and cost functio
 
 #thoughts;
 #----Electrolyte diffusivity: very sensitive for overall shape
@@ -244,3 +280,5 @@ plt.plot(Z_re,-Z_im)
 # Electrolyte conductivity
 # 
 
+
+# %%
