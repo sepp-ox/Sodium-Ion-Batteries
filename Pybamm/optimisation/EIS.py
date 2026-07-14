@@ -135,7 +135,7 @@ parameter_values = pybamm.ParameterValues(dictionary)
 #frequencies = np.logspace(-2,5,200)
 
 #%%--setting up synthetic data---
-frequencies = np.logspace(3,5,141)
+frequencies = np.logspace(1e-4,1e-1,141)
 model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential","contact resistance": "true"})
 simulator_syn = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
 solution= simulator_syn.solve()
@@ -274,7 +274,6 @@ final_result = second_optim.run()
 print(final_result.best_inputs)
 print(final_result)
 #%%
-
 pybop.plot.nyquist(problem=problem, inputs = final_result.best_inputs)
 #%%
 print(result)
@@ -283,9 +282,7 @@ pybop.plot.nyquist(problem=problem, inputs = result.best_inputs)
 print(problem.parameters.names)
 x0 = problem.parameters.get_initial_values()
 print("cost at optimised parameter:", problem(result.best_inputs))
-
 print("cost at initial guess:", problem(x0))
-
 #%% contents: running optimised values in a new simulation 
 result.best_inputs
 model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential", "contact resistance" : "true"})
@@ -336,7 +333,7 @@ def section_based_optimisation(frequencies = None, f_bounds = [], parameter_valu
     if f_bounds[0] >= f_bounds[1]:
         return ValueError("Lower bound must be strictly less than upper")
     f_low,f_high = f_bounds[0],f_bounds[1]
-    mask = (frequencies >= f_low) & (frequencies <=f_high)
+    mask = (frequencies >= f_low) & (frequencies <= f_high)
     Z_real =Z_real[mask]
     Z_imag = Z_imag[mask]
     frequencies = frequencies[mask]
@@ -383,7 +380,8 @@ data_Z_re      = np.asarray(data_Z_re)[idx]
 data_Z_im      = np.asarray(data_Z_im)[idx]
 trim =(data_frequency <= 5e4)
 data_frequency,data_Z_im,data_Z_re = data_frequency[trim], data_Z_im[trim],data_Z_re[trim]
-def check(fbounds ,data_frequency,data_Z_re,data_Z_im):
+Impedance_data_galen =   np.asarray(data_Z_re,dtype=float ) - 1j * np.asarray(data_Z_im, dtype= float)
+def frequency_plot(fbounds ,data_frequency,data_Z_re,data_Z_im):
     mask = (data_frequency >= fbounds[0]) & (data_frequency <= fbounds[1])
     data_frequency=  data_frequency[mask]
     data_Z_re = data_Z_re[mask]
@@ -392,11 +390,11 @@ def check(fbounds ,data_frequency,data_Z_re,data_Z_im):
     return None
 
 #getting frequency bounds
-freq_bounds_semicircle = [2e2,5e4]
-freq_bounds_warburg=[0.5e-1,1.9e2]
+freq_bounds_semicircle = [5e3,5e4]
+freq_bounds_warburg=[9e-1,1e2]
 freq_bounds_diffusion_tail= [data_frequency.min(), 0.5e-1]
 fbounds = freq_bounds_semicircle
-check(fbounds=fbounds, data_frequency=data_frequency,data_Z_re=data_Z_re ,data_Z_im=data_Z_im)
+frequency_plot(fbounds=fbounds, data_frequency=data_frequency,data_Z_re=data_Z_re ,data_Z_im=data_Z_im)
 #%% SEMICIRCLE: HIGH FREQUENCY
 optim_params= {
     "Contact resistance [Ohm]":pybop.Parameter(pybop.Gaussian(40,10,truncated_at = [5,80]),initial_value = 40),
@@ -411,14 +409,22 @@ optim_params= {
 semi_circle = section_based_optimisation(frequencies=data_frequency, f_bounds=freq_bounds_semicircle,
                                          parameter_values=parameter_values,optim_params=optim_params,Z_real = data_Z_re,Z_imag= data_Z_im)
 
+#%%
+
 #%% updating parameter values with the best values from the previous optimisation
 print(semi_circle[0])
 parameter_values.update(semi_circle[0].best_inputs)
 parameter_values["Negative electrode double-layer capacity [F.m-2]"]=parameter_values["Positive electrode double-layer capacity [F.m-2]"]
 print(parameter_values["Negative electrode double-layer capacity [F.m-2]"])
+sim_check = pybop.pybamm.EISSimulator(
+    pybamm.lithium_ion.SPMe(options={"surface form": "differential", "contact resistance": "true"}),
+    parameter_values=parameter_values, f_eval=data_frequency)
+Zm = sim_check.solve()["Impedance"].data
 
+hf = data_frequency > 5e3    # everything above the next window
+rel_err = np.abs(Zm[hf] - Impedance_data_galen[hf]) / np.abs(Impedance_data_galen[hf])
+print(f"HF relative misfit: mean {rel_err.mean():.2%}, max {rel_err.max():.2%}")
 #%% Electrolyte Center:
-freq_bounds_warburg = [0.5e-1,1e3]
 optim_params_warburg = {"Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
                                                        transformation = pybop.LogTransformation(),
                                                     initial_value = 2e-10),
@@ -460,7 +466,6 @@ print(parameter_values)
 
 #%%
 #%% total optimisaiton
-freq_total = data_frequency
 
 
 
