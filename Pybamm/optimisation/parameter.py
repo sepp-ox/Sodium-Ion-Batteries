@@ -440,4 +440,21 @@ param_names = [
 true_values = [0.88,2e-10,0.5,0.5]
 opt_values  = result.x            # or list(result.x), same order as names
 results_to_latex(param_names, true_values, opt_values)
+
+for x in [0.528, x_mid, 1.0]:
+    U = parameter_values.evaluate(
+        pybamm.FunctionParameter(
+            "Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar(x)},
+        )
+    )
+    print(U)
+
+dx = 1e-4
+dUdx = (parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar(x_mid + dx)}))
+      - parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar(x_mid - dx)}))) / (2 * dx)
+print("dU/dx at operating point:", dUdx)
+
  
