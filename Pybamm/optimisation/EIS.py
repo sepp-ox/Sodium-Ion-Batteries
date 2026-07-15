@@ -35,7 +35,7 @@ x_clean = x[mask].to_numpy();V_clean = V[mask].to_numpy()
 xc=np.asarray(x_clean,dtype= float).ravel()
 xc_mapped = 0.472 * xc + 0.528 #specific mapping for the problem i am running: change based on galens exact 
 Vc=np.asarray(V_clean,dtype= float).ravel()
-
+plt.plot(xc_mapped,Vc)
 def func(sto):
      return pybamm.Interpolant(xc_mapped,Vc[::-1], sto, interpolator="cubic")
 F= 96485.33212
@@ -53,11 +53,13 @@ data_EIS  =pd.read_csv(r"C:\Users\sepps\OneDrive\Oxford\diss\Code\Pybamm\data\NM
 data_frequency  = data_EIS["frequency (Hz)"]
 data_Z_re = data_EIS["Z'"]
 data_Z_im = data_EIS["Z''"]
-idx = np.argsort(data_frequency)
-data_frequency = np.asarray(data_frequency)[idx]
-data_Z_re      = np.asarray(data_Z_re)[idx]
-data_Z_im      = np.asarray(data_Z_im)[idx]
-print(np.shape(data_frequency))
+
+#idx = np.argsort(data_frequency)
+#data_frequency = np.asarray(data_frequency)[idx]
+#data_Z_re      = np.asarray(data_Z_re)[idx]
+#data_Z_im      = np.asarray(data_Z_im)[idx]
+#print(np.shape(data_frequency))
+
 #print(data_frequency.max(), data_frequency.min())
 #print(data_frequency)
 plt.plot(data_Z_re,data_Z_im, "o-")
@@ -73,8 +75,8 @@ dictionary = {
        #PARTICLE
         "Negative particle radius [m]": 3e-06,
         "Positive particle radius [m]": 3e-06,
-        "Negative particle diffusivity [m2.s-1]":1e-10,
-        "Positive particle diffusivity [m2.s-1]":1e-10,
+        "Negative particle diffusivity [m2.s-1]":1e-6,
+        "Positive particle diffusivity [m2.s-1]":1e-6,
         #TEMPERATURE
         "Initial temperature [K]":298.15,
         "Ambient temperature [K]": 298,#reference 293.15,change to 298
@@ -103,8 +105,8 @@ dictionary = {
         "Positive electrode thickness [m]": 5e-05,
         "Negative electrode active material volume fraction":0.6, 
         "Positive electrode active material volume fraction":0.6,#open to changes
-        "Electrode height [m]":1,
-        "Electrode width [m]":1.5e-04,#only the product is computed...so mathcing it to galens data
+        "Electrode height [m]":pybamm.sqrt(1.5e-04),
+        "Electrode width [m]":pybamm.sqrt(1.5e-04),#only the product is computed...so mathcing it to galens data
         #"Electrode cross-sectional area [m2]": 1.5e-04,
        #ELECTROLYTE DATA
         "Electrolyte conductivity [S.m-1]":0.05,#sdecrease 0.88
@@ -134,6 +136,55 @@ dictionary = {
 parameter_values = pybamm.ParameterValues(dictionary)
 #frequencies = np.logspace(-2,5,200)
 
+#%%
+
+dx = 1e-4
+dUdx = (parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar(x_mid + dx)}))
+      - parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar( x_mid- dx)}))) / (2 * dx)
+print("dU/dx at operating point:", dUdx)
+float(dUdx)
+#%% 
+pv = parameter_values
+R_p  = pv["Positive particle radius [m]"]
+D_s  = pv["Positive particle diffusivity [m2.s-1]"]
+D_e  = pv["Electrolyte diffusivity [m2.s-1]"]
+eps  = pv["Positive electrode porosity"]
+eps_sep = pv["Separator porosity"]
+b    = pv["Positive electrode Bruggeman coefficient (electrolyte)"]
+b_sep = pv["Separator Bruggeman coefficient (electrolyte)"]
+L    = (pv["Negative electrode thickness [m]"] + pv["Separator thickness [m]"]
+        + pv["Positive electrode thickness [m]"])
+k    = pv["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]
+ce0  = pv["Initial concentration in electrolyte [mol.m-3]"]
+
+tau_d   = R_p**2 / D_s
+tau_e   = eps_sep * L**2 / (eps**b * D_e)          # paper's convention
+tau_sep = L**2 / (eps_sep**(b_sep - 1) * D_e)
+tau_ct  = R_p / (k * np.sqrt(ce0))                  # = F R / (m sqrt(ce0)), m = F k
+
+for name, tau in [("particle diffusion", tau_d), ("electrolyte (electrode)", tau_e),
+                  ("electrolyte (separator)", tau_sep), ("charge transfer", tau_ct)]:
+    print(f"{name:26s} tau = {tau:10.4g} s   ->  f = {1/(2*np.pi*tau):10.4g} Hz")
+
+    Rg, T, Fc = 8.314, 298.15, 96485.33
+cs   = pv["Initial concentration in positive electrode [mol.m-3]"]
+cmax = pv["Maximum concentration in positive electrode [mol.m-3]"]
+eps_s = pv["Positive electrode active material volume fraction"]
+Cdl  = pv["Positive electrode double-layer capacity [F.m-2]"]
+A    = pv["Electrode height [m]"] * pv["Electrode width [m]"]
+L_el = pv["Positive electrode thickness [m]"]
+C_diff = Fc * A *L * c_max / float(dUdx)
+j0    = Fc * k * np.sqrt(ce0 * cs * (cmax - cs))       # A/m2
+aLA   = (3 * eps_s / R_p) * L_el * A                    # total interfacial area, m2
+R_ct  = (Rg * T / Fc) / j0 / aLA                        # per electrode, Ohm
+C_tot = Cdl * aLA                                       # per electrode, F
+f_apex = 1 / (2 * np.pi * R_ct * C_tot)
+print(R_ct, f_apex)
+print("C_diff", C_diff)
+print(f"R_ct/electrode = {R_ct:.3g} Ohm, semicircle apex f = {f_apex:.4g} Hz")
+print("C_diff", C_diff)
 #%%--setting up synthetic data---
 frequencies = np.logspace(1e-4,1e-1,141)
 model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential","contact resistance": "true"})
@@ -347,7 +398,7 @@ def section_based_optimisation(frequencies = None, f_bounds = [], parameter_valu
     cost= pybop.SumSquaredError(dataset=dataset,target="Impedance",weighting = "domain")
     cost.weighting = cost.weighting / np.abs(Impedance_data) **2 
     problem = pybop.Problem(simulator,cost);problem.set_target("Impedance")
-    optim = pybop.CMAES(problem);optim.set_max_iterations(200);optim.set_max_unchanged_iterations(60)
+    optim = pybop.CMAES(problem);optim.set_max_iterations(300);optim.set_max_unchanged_iterations(100)
     result = optim.run()
     problem.parameters.update(initial_values=result.x) 
     second_optim = pybop.NelderMead(problem);second_optim.set_max_iterations(50);second_optim.set_max_unchanged_iterations(20)
@@ -367,7 +418,6 @@ def section_based_optimisation(frequencies = None, f_bounds = [], parameter_valu
 #data_frequency=  data_frequency[mask]
 #data_Z_re = data_Z_re[mask]
 #data_Z_im = data_Z_im[mask]
-
 
 #%%
 parameter_values= pybamm.ParameterValues(dictionary)
@@ -391,9 +441,9 @@ def frequency_plot(fbounds ,data_frequency,data_Z_re,data_Z_im):
 
 #getting frequency bounds
 freq_bounds_semicircle = [5e3,5e4]
-freq_bounds_warburg=[9e-1,1e2]
-freq_bounds_diffusion_tail= [data_frequency.min(), 0.5e-1]
-fbounds = freq_bounds_semicircle
+freq_bounds_warburg=[1e0,1e1]
+freq_bounds_diffusion_tail= [data_frequency.min(), 5e3]
+fbounds = freq_bounds_diffusion_tail
 frequency_plot(fbounds=fbounds, data_frequency=data_frequency,data_Z_re=data_Z_re ,data_Z_im=data_Z_im)
 #%% SEMICIRCLE: HIGH FREQUENCY
 optim_params= {
@@ -401,9 +451,9 @@ optim_params= {
    "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(0.1,0.05,truncated_at = [0.001,10]), initial_value= 0.05),
     "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(0.5,0.25,truncated_at=[1e-4,2]),initial_value= 0.5),
        "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(
-            pybop.Gaussian(5e-11, 9e-12, truncated_at=[1e-13, 1e-5]),
+            pybop.Gaussian(5e-12,2e-12, truncated_at=[1e-15, 1e-10]),
             transformation=pybop.LogTransformation(),
-            initial_value=5e-11),
+            initial_value=5e-12),
     "Negative electrode double-layer capacity [F.m-2]":pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]"),
     }
 semi_circle = section_based_optimisation(frequencies=data_frequency, f_bounds=freq_bounds_semicircle,
@@ -413,6 +463,9 @@ semi_circle = section_based_optimisation(frequencies=data_frequency, f_bounds=fr
 
 #%% updating parameter values with the best values from the previous optimisation
 print(semi_circle[0])
+print(semi_circle[0].best_inputs["Electrolyte conductivity [S.m-1]"])
+#run1 = semi_circle[0].best_inputs#run 1 savedwith good inputs
+
 parameter_values.update(semi_circle[0].best_inputs)
 parameter_values["Negative electrode double-layer capacity [F.m-2]"]=parameter_values["Positive electrode double-layer capacity [F.m-2]"]
 print(parameter_values["Negative electrode double-layer capacity [F.m-2]"])
@@ -420,11 +473,50 @@ sim_check = pybop.pybamm.EISSimulator(
     pybamm.lithium_ion.SPMe(options={"surface form": "differential", "contact resistance": "true"}),
     parameter_values=parameter_values, f_eval=data_frequency)
 Zm = sim_check.solve()["Impedance"].data
-
+plt.plot(np.real(Zm),-np.imag(Zm))
+plt.plot(data_Z_re,data_Z_im)
 hf = data_frequency > 5e3    # everything above the next window
 rel_err = np.abs(Zm[hf] - Impedance_data_galen[hf]) / np.abs(Impedance_data_galen[hf])
 print(f"HF relative misfit: mean {rel_err.mean():.2%}, max {rel_err.max():.2%}")
-#%% Electrolyte Center:
+#%%
+#Diagnostics
+pv = parameter_values
+R_p  = pv["Positive particle radius [m]"]
+D_s  = pv["Positive particle diffusivity [m2.s-1]"]
+D_e  = pv["Electrolyte diffusivity [m2.s-1]"]
+eps  = pv["Positive electrode porosity"]
+eps_sep = pv["Separator porosity"]
+b    = pv["Positive electrode Bruggeman coefficient (electrolyte)"]
+b_sep = pv["Separator Bruggeman coefficient (electrolyte)"]
+L    = (pv["Negative electrode thickness [m]"] + pv["Separator thickness [m]"]
+        + pv["Positive electrode thickness [m]"])
+k    = pv["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]
+ce0  = pv["Initial concentration in electrolyte [mol.m-3]"]
+
+tau_d   = R_p**2 / D_s
+tau_e   = eps_sep * L**2 / (eps**b * D_e)          # paper's convention
+tau_sep = L**2 / (eps_sep**(b_sep - 1) * D_e)
+tau_ct  = R_p / (k * np.sqrt(ce0))                  # = F R / (m sqrt(ce0)), m = F k
+
+for name, tau in [("particle diffusion", tau_d), ("electrolyte (electrode)", tau_e),
+                  ("electrolyte (separator)", tau_sep), ("charge transfer", tau_ct)]:
+    print(f"{name:26s} tau = {tau:10.4g} s   ->  f = {1/(2*np.pi*tau):10.4g} Hz")
+
+    Rg, T, Fc = 8.314, 298.15, 96485.33
+cs   = pv["Initial concentration in positive electrode [mol.m-3]"]
+cmax = pv["Maximum concentration in positive electrode [mol.m-3]"]
+eps_s = pv["Positive electrode active material volume fraction"]
+Cdl  = pv["Positive electrode double-layer capacity [F.m-2]"]
+A    = pv["Electrode height [m]"] * pv["Electrode width [m]"]
+L_el = pv["Positive electrode thickness [m]"]
+
+j0    = Fc * k * np.sqrt(ce0 * cs * (cmax - cs))       # A/m2
+aLA   = (3 * eps_s / R_p) * L_el * A                    # total interfacial area, m2
+R_ct  = (Rg * T / Fc) / j0 / aLA                        # per electrode, Ohm
+C_tot = Cdl * aLA                                       # per electrode, F
+f_apex = 1 / (2 * np.pi * R_ct * C_tot)
+print(f"R_ct/electrode = {R_ct:.3g} Ohm, semicircle apex f = {f_apex:.4g} Hz")
+#%% Electrolyte Center: I AM SCRAPPING THSI PORTION DUE TO ITS TIME CONSTNAT 
 optim_params_warburg = {"Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
                                                        transformation = pybop.LogTransformation(),
                                                     initial_value = 2e-10),
@@ -435,26 +527,37 @@ optim_params_warburg = {"Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop
 warburg = section_based_optimisation(frequencies=data_frequency, f_bounds=freq_bounds_warburg,
                                          parameter_values=parameter_values,optim_params=optim_params_warburg,Z_real = data_Z_re,Z_imag= data_Z_im)
 
-
 #%%
-parameter_values.update(warburg[0].best_inputs)
-
+#parameter_values.update(warburg[0].best_inputs)
 #DIFFUSION TAIL
 optim_params_diffusion_tail = {
-    
-"Positive particle diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-16,1e-8]),
+"Positive particle diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-13,2e-13,truncated_at = [1e-16,1e-10]),
                                                       transformation = pybop.LogTransformation(),
-                                                        initial_value = 1e-10),
+                                                        initial_value = 1e-13),
     "Negative particle diffusivity [m2.s-1]" : pybamm.Parameter("Positive particle diffusivity [m2.s-1]"),
-    "Positive particle radius [m]":pybop.Parameter(pybop.Gaussian(3e-6,6.5e-7,truncated_at = [1e-8,1e-4]),
-                                                        initial_value = 3e-6),
-    "Negative particle radius [m]":pybamm.Parameter("Positive particle radius [m]"),
-    "Initial concentration in positive electrode [mol.m-3]":pybop.Parameter(pybop.Gaussian(c_init,1e3, truncated_at= [c_min,c_max]),initial_value= c_init),
+   # "Positive particle radius [m]":pybop.Parameter(pybop.Gaussian(3e-6,6.5e-6,truncated_at = [1e-8,1e-4]),
+                                                        #initial_value = 3e-6),
+   # "Negative particle radius [m]":pybamm.Parameter("Positive particle radius [m]"),
+    "Initial concentration in positive electrode [mol.m-3]":pybop.Parameter(pybop.Gaussian(c_max*0.9,c_max*0.45, truncated_at= [c_min,c_max]),initial_value= c_max*0.9),
      "Initial concentration in negative electrode [mol.m-3]":pybamm.Parameter("Initial concentration in positive electrode [mol.m-3]"),
-}
-freq_bounds_diffusion_tail = [data_frequency.min(),1] #Hz
-diffusion_tail = section_based_optimisation(frequencies=data_frequency,f_bounds=freq_bounds_diffusion_tail,parameter_values=parameter_values,optim_params=optim_params_diffusion_tail, Z_real=data_Z_re,Z_imag=data_Z_im)
-
+    # "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
+                                                       #transformation = pybop.LogTransformation(),
+                                                    #initial_value = 2e-10),
+   #"Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1,0.25,truncated_at = [0.01,10]),
+                                                      #transformation = pybop.LogTransformation(),
+                                                       # initial_value = 0.88),
+     'Electrolyte conductivity [S.m-1]': pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs['Electrolyte conductivity [S.m-1]'], 1e-4), initial_value = semi_circle[0].best_inputs['Electrolyte conductivity [S.m-1]']),
+    "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"],semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"]*0.2 ), initial_value = semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"]),
+       "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"],semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]*0.2 ), initial_value = semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]),
+    "Negative electrode double-layer capacity [F.m-2]":pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]")}                                         
+ #Hz
+freq_bounds_all = [data_frequency.min(), 5e4]
+diffusion_tail = section_based_optimisation(frequencies=data_frequency,f_bounds=freq_bounds_all,parameter_values=parameter_values,optim_params=optim_params_diffusion_tail, Z_real=data_Z_re,Z_imag=data_Z_im)
+#%%
+R_ct = 12.6   # from your diagnostic, or recompute
+C_tot = parameter_values["Positive electrode double-layer capacity [F.m-2]"] * (3*0.6/3e-6) * 5e-5 * 1.5e-4
+print("apex at start:", 1/(2*np.pi*R_ct*C_tot), "Hz  (want ~5.8e3)")
+print("knee at start:", 1e-13/(2*np.pi*(3e-6)**2), "Hz  (want ≲1e-2)")
 #%% plotting section-wise results
 #updating parameter values
 parameter_values.update(diffusion_tail[0].best_inputs)
