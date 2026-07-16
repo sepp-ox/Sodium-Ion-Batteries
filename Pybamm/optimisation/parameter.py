@@ -457,4 +457,175 @@ dUdx = (parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode O
             {"stoichiometry": pybamm.Scalar(x_mid - dx)}))) / (2 * dx)
 print("dU/dx at operating point:", dUdx)
 
+
+dx = 1e-4
+dUdx = (parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar(x_mid + dx)}))
+      - parameter_values.evaluate(pybamm.FunctionParameter("Positive electrode OCP [V]",
+            {"stoichiometry": pybamm.Scalar( x_mid- dx)}))) / (2 * dx)
+print("dU/dx at operating point:", dUdx)
+float(dUdx)
+#%% 
+pv = parameter_values
+R_p  = pv["Positive particle radius [m]"]
+D_s  = pv["Positive particle diffusivity [m2.s-1]"]
+D_e  = pv["Electrolyte diffusivity [m2.s-1]"]
+eps  = pv["Positive electrode porosity"]
+eps_sep = pv["Separator porosity"]
+b    = pv["Positive electrode Bruggeman coefficient (electrolyte)"]
+b_sep = pv["Separator Bruggeman coefficient (electrolyte)"]
+L    = (pv["Negative electrode thickness [m]"] + pv["Separator thickness [m]"]
+        + pv["Positive electrode thickness [m]"])
+k    = pv["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]
+ce0  = pv["Initial concentration in electrolyte [mol.m-3]"]
+
+tau_d   = R_p**2 / D_s
+tau_e   = eps_sep * L**2 / (eps**b * D_e)          # paper's convention
+tau_sep = L**2 / (eps_sep**(b_sep - 1) * D_e)
+tau_ct  = R_p / (k * np.sqrt(ce0))                  # = F R / (m sqrt(ce0)), m = F k
+
+for name, tau in [("particle diffusion", tau_d), ("electrolyte (electrode)", tau_e),
+                  ("electrolyte (separator)", tau_sep), ("charge transfer", tau_ct)]:
+    print(f"{name:26s} tau = {tau:10.4g} s   ->  f = {1/(2*np.pi*tau):10.4g} Hz")
+
+    Rg, T, Fc = 8.314, 298.15, 96485.33
+cs   = pv["Initial concentration in positive electrode [mol.m-3]"]
+cmax = pv["Maximum concentration in positive electrode [mol.m-3]"]
+eps_s = pv["Positive electrode active material volume fraction"]
+Cdl  = pv["Positive electrode double-layer capacity [F.m-2]"]
+A    = pv["Electrode height [m]"] * pv["Electrode width [m]"]
+L_el = pv["Positive electrode thickness [m]"]
+C_diff = Fc * A *L * c_max / float(dUdx)
+j0    = Fc * k * np.sqrt(ce0 * cs * (cmax - cs))       # A/m2
+aLA   = (3 * eps_s / R_p) * L_el * A                    # total interfacial area, m2
+R_ct  = (Rg * T / Fc) / j0 / aLA                        # per electrode, Ohm
+C_tot = Cdl * aLA                                       # per electrode, F
+f_apex = 1 / (2 * np.pi * R_ct * C_tot)
+print(R_ct, f_apex)
+print("C_diff", C_diff)
+print(f"R_ct/electrode = {R_ct:.3g} Ohm, semicircle apex f = {f_apex:.4g} Hz")
+print("C_diff", C_diff)
+
+
+
+#Diagnostics
+pv = parameter_values
+R_p  = pv["Positive particle radius [m]"]
+D_s  = pv["Positive particle diffusivity [m2.s-1]"]
+D_e  = pv["Electrolyte diffusivity [m2.s-1]"]
+eps  = pv["Positive electrode porosity"]
+eps_sep = pv["Separator porosity"]
+b    = pv["Positive electrode Bruggeman coefficient (electrolyte)"]
+b_sep = pv["Separator Bruggeman coefficient (electrolyte)"]
+L    = (pv["Negative electrode thickness [m]"] + pv["Separator thickness [m]"]
+        + pv["Positive electrode thickness [m]"])
+k    = pv["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]
+ce0  = pv["Initial concentration in electrolyte [mol.m-3]"]
+
+tau_d   = R_p**2 / D_s
+tau_e   = eps_sep * L**2 / (eps**b * D_e)          # paper's convention
+tau_sep = L**2 / (eps_sep**(b_sep - 1) * D_e)
+tau_ct  = R_p / (k * np.sqrt(ce0))                  # = F R / (m sqrt(ce0)), m = F k
+
+for name, tau in [("particle diffusion", tau_d), ("electrolyte (electrode)", tau_e),
+                  ("electrolyte (separator)", tau_sep), ("charge transfer", tau_ct)]:
+    print(f"{name:26s} tau = {tau:10.4g} s   ->  f = {1/(2*np.pi*tau):10.4g} Hz")
+
+    Rg, T, Fc = 8.314, 298.15, 96485.33
+cs   = pv["Initial concentration in positive electrode [mol.m-3]"]
+cmax = pv["Maximum concentration in positive electrode [mol.m-3]"]
+eps_s = pv["Positive electrode active material volume fraction"]
+Cdl  = pv["Positive electrode double-layer capacity [F.m-2]"]
+A    = pv["Electrode height [m]"] * pv["Electrode width [m]"]
+L_el = pv["Positive electrode thickness [m]"]
+
+j0    = Fc * k * np.sqrt(ce0 * cs * (cmax - cs))       # A/m2
+aLA   = (3 * eps_s / R_p) * L_el * A                    # total interfacial area, m2
+R_ct  = (Rg * T / Fc) / j0 / aLA                        # per electrode, Ohm
+C_tot = Cdl * aLA                                       # per electrode, F
+f_apex = 1 / (2 * np.pi * R_ct * C_tot)
+print(f"R_ct/electrode = {R_ct:.3g} Ohm, semicircle apex f = {f_apex:.4g} Hz")
+#%% Electrolyte Center: I AM SCRAPPING THSI PORTION DUE TO ITS TIME CONSTNAT 
+optim_params_warburg = {"Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
+                                                       transformation = pybop.LogTransformation(),
+                                                    initial_value = 2e-10),
+   "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1,0.25,truncated_at = [0.01,10]),
+                                                      transformation = pybop.LogTransformation(),
+                                                        initial_value = 0.88),
+}
+warburg = section_based_optimisation(frequencies=data_frequency, f_bounds=freq_bounds_warburg,
+                                         parameter_values=parameter_values,optim_params=optim_params_warburg,Z_real = data_Z_re,Z_imag= data_Z_im)
+
  
+ 
+
+
+
+
+
+
+
+
+"""
+parameter_values.update({
+    # short times(frequencies 1 Hz < f< 1kHz)
+    Initial concentration in positive electrode [mol.m-3]":pybop.Parameter(pybop.Gaussian(c_init,1e3, truncated_at= [c_min,c_max]),initial_value= c_init),
+    "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
+                                                       transformation = pybop.LogTransformation(),
+                                                    initial_value = 2e-10),
+   "Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1,0.25,truncated_at = [0.01,10]),
+                                                      transformation = pybop.LogTransformation(),
+                                                        initial_value = 0.88),
+    "Positive particle diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-16,1e-8]),
+                                                      transformation = pybop.LogTransformation(),
+                                                        initial_value = 1e-10),
+    "Contact resistance [Ohm]":pybop.Parameter(pybop.Gaussian(40,10,truncated_at = [5,80]),
+                                                        initial_value = 40),
+    "Cation transference number":pybop.Parameter(pybop.Gaussian(0.5,0.3,truncated_at = [1e-15,0.7]),
+                                                        initial_value = 0.4),
+    #"Electrode height [m]":pybop.Parameter(pybop.Gaussian(0.003,0.0065,truncated_at = [1e-18,1e-1]),transformation = pybop.LogTransformation(),
+                                                        #initial_value = 0.0007),
+    #"Electrode width [m]":pybop.Parameter(pybop.Gaussian(0.1,0.05,truncated_at = [1e-6,1.5]),transformation = pybop.LogTransformation(),
+                                                        #initial_value = 0.1),
+    #"Thermodynamic factor":pybop.Parameter(pybop.Gaussian(0.5,0.3,truncated_at = [1e-15,0.999999]),
+                                                        #initial_value = 0.4),
+    })
+#need to make sure it does not check to see if parameter exists as it is new
+parameter_values.update(
+    {
+        "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(
+            pybop.Gaussian(5e-11, 9e-12, truncated_at=[1e-13, 1e-5]),
+            transformation=pybop.LogTransformation(),
+            initial_value=5e-11),
+    },
+    check_already_exists=False,   # needed the first time, since it's a new key
+)
+
+#setting the negative and positive electrode parameters to be the same.
+parameter_values["Negative electrode double-layer capacity [F.m-2]"]= pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]")
+parameter_values["Initial concentration in negative electrode [mol.m-3]"]=pybamm.Parameter("Initial concentration in positive electrode [mol.m-3]")
+parameter_values["Negative particle diffusivity [m2.s-1]"]=pybamm.Parameter("Positive particle diffusivity [m2.s-1]")
+"""
+
+
+optim_params_diffusion_tail = {
+"Positive particle diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-13,2e-13,truncated_at = [1e-16,1e-10]),
+                                                      transformation = pybop.LogTransformation(),
+                                                        initial_value = 1e-13),
+    "Negative particle diffusivity [m2.s-1]" : pybamm.Parameter("Positive particle diffusivity [m2.s-1]"),
+   # "Positive particle radius [m]":pybop.Parameter(pybop.Gaussian(3e-6,6.5e-6,truncated_at = [1e-8,1e-4]),
+                                                        #initial_value = 3e-6),
+   # "Negative particle radius [m]":pybamm.Parameter("Positive particle radius [m]"),
+    "Initial concentration in positive electrode [mol.m-3]":pybop.Parameter(pybop.Gaussian(c_max*0.9,c_max*0.45, truncated_at= [c_min,c_max]),initial_value= c_max*0.9),
+     "Initial concentration in negative electrode [mol.m-3]":pybamm.Parameter("Initial concentration in positive electrode [mol.m-3]"),
+    # "Electrolyte diffusivity [m2.s-1]":pybop.Parameter(pybop.Gaussian(1e-10,5e-11,truncated_at = [1e-15,1e-4]),
+                                                       #transformation = pybop.LogTransformation(),
+                                                    #initial_value = 2e-10),
+   #"Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(1,0.25,truncated_at = [0.01,10]),
+                                                      #transformation = pybop.LogTransformation(),
+                                                       # initial_value = 0.88),
+     'Electrolyte conductivity [S.m-1]': pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs['Electrolyte conductivity [S.m-1]'], 1e-4), initial_value = semi_circle[0].best_inputs['Electrolyte conductivity [S.m-1]']),
+    "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"],semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"]*0.2 ), initial_value = semi_circle[0].best_inputs["Positive electrode double-layer capacity [F.m-2]"]),
+       "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"],semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]*0.2 ), initial_value = semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]),
+    "Negative electrode double-layer capacity [F.m-2]":pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]")}                                         
+ #Hz
