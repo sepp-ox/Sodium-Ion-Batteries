@@ -44,26 +44,42 @@ def section_based_optimisation(model = "DFN" ,frequencies = None, f_bounds = [],
     Z_real =Z_real[mask]
     Z_imag = Z_imag[mask]
     frequencies = frequencies[mask]
+    parameter_values = parameter_values.copy()
     parameter_values.update(optim_params,check_already_exists=False)
     Impedance_data =   np.asarray(Z_real,dtype=float ) - 1j * np.asarray(Z_imag, dtype= float)
     dataset = pybop.Dataset({"Frequency [Hz]": np.asarray(frequencies),
                          "Impedance": Impedance_data},domain = "Frequency [Hz]")
     if model == "GroupedSPMe":
         model_pybop  = pybop.models.lithium_ion.GroupedSPMe(options ={"surface form":"differential", "contact resistance" : "true"})
+        exp_r = pybamm.MeshGenerator(
+        pybamm.Exponential1DSubMesh,
+        submesh_params={"side": "right", "stretch": 6.0})
+        submesh_types = model_pybop.default_submesh_types.copy()
+        submesh_types["negative particle"] = exp_r
+        submesh_types["positive particle"] = exp_r
+        var_pts = {"x_n": 30, "x_s": 30, "x_p": 30, "r_n": 100, "r_p": 100} 
+        simulator = pybop.pybamm.EISSimulator(model_pybop, parameter_values=parameter_values,
+        f_eval=np.asarray(frequencies),
+        var_pts=var_pts, submesh_types=submesh_types)
     elif model == "DFN":
         model_pybop = pybamm.lithium_ion.DFN(options = {"surface form":"differential", "contact resistance" : "true"})  
+        simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
+
     elif model == "SPMe":
-        model_pybop = pybamm.lithium_ion.SPMe(options = {"surface form":"differential", "contact resistance" : "true"})  
+        model_pybop = pybamm.lithium_ion.SPMe(options = {"surface form":"differential", "contact resistance" : "true"}) 
+        simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
+ 
     elif model == "SPM":
         model_pybop = pybamm.lithium_ion.SPM(options = {"surface form":"differential", "contact resistance" : "true"})  
-    simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
+        simulator = pybop.pybamm.EISSimulator(model_pybop,parameter_values= parameter_values, f_eval= np.asarray(frequencies))
     cost= pybop.SumSquaredError(dataset=dataset,target="Impedance",weighting = "domain")
     cost.weighting = cost.weighting / np.abs(Impedance_data) **2 
     problem = pybop.Problem(simulator,cost);problem.set_target("Impedance")
     pybop.plot.nyquist(problem=problem)
-    optim = pybop.CMAES(problem);optim.set_max_iterations(300);optim.set_max_unchanged_iterations(150)
+    optim = pybop.CMAES(problem);optim.set_max_iterations(500);optim.set_max_unchanged_iterations(150)
     result = optim.run()
     pybop.plot.nyquist(problem=problem,inputs=result.best_inputs)
+    print(result)
     return result.best_inputs,result.best_cost
 def frequency_plot(fbounds ,data_frequency,data_Z_re,data_Z_im):
     mask = (data_frequency >= fbounds[0]) & (data_frequency <= fbounds[1])
@@ -213,7 +229,7 @@ dictionary = {
         "Electrode height [m]":float(np.sqrt(1.5e-04)),
         "Electrode width [m]":float(np.sqrt(1.5e-04)),#only the product is computed...so matching to galens data
        #ELECTROLYTE DATA
-        "Electrolyte conductivity [S.m-1]":0.370,#sdecrease 0.88
+        "Electrolyte conductivity [S.m-1]":0.0001,#sdecrease 0.88
         "Electrolyte diffusivity [m2.s-1]":2e-10,#2e-10 #decrease 
         "Initial concentration in electrolyte [mol.m-3]":1000,
         "Negative electrode Bruggeman coefficient (electrolyte)": 1.875,
@@ -247,6 +263,7 @@ diagnostics:
 calculating time coefficents and calculating the corresponding frqeuencies they are active in 
 
 '''
+
 parameter_values["Negative particle diffusivity [m2.s-1]"]=1e-15
 parameter_values["Positive particle diffusivity [m2.s-1]"]=parameter_values["Negative particle diffusivity [m2.s-1]"]
 run(model="SPMe", data_frequency=data_frequency, parameter_values=parameter_values,data_Z_re=data_Z_re,data_Z_im=data_Z_im )
@@ -260,9 +277,10 @@ time_constants(parameter_values)
 3) running optimiser
 '''
 freq_bounds_semicircle = [5e2,5e4]
-freq_bounds_electrolyte=[5e-1,5e2]
+freq_bounds_electrolyte=[0.06,5e4]
+print(data_frequency.min())
 freq_bounds_diffusion= [data_frequency.min(),5e-1]
-freq_bounds= freq_bounds_electrolyte
+freq_bounds= freq_bounds_diffusion
 frequency_plot(fbounds=freq_bounds,data_frequency=data_frequency,data_Z_im=data_Z_im,data_Z_re=data_Z_re)
 #%%
 optim_params= {
@@ -270,9 +288,9 @@ optim_params= {
    #"Electrolyte conductivity [S.m-1]":pybop.Parameter(pybop.Gaussian(0.1,0.05,truncated_at = [0.001,10]), initial_value= 0.05),
     "Positive electrode double-layer capacity [F.m-2]": pybop.Parameter(pybop.Gaussian(0.5,0.25,truncated_at=[1e-4,2]),initial_value= 0.5),
        "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(
-            pybop.Gaussian(5e-12,5e-12, truncated_at=[1e-15, 1e-10]),
+            pybop.Gaussian(5e-13,5e-10, truncated_at=[1e-18, 1e-10]),
             transformation=pybop.LogTransformation(),
-            initial_value=5e-12),
+            initial_value=5e-13),
    "Negative electrode double-layer capacity [F.m-2]":pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]"),
    #"Positive particle radius [m]":pybop.Parameter(pybop.Gaussian(3e-6,6.1e-6,truncated_at = [1e-8,1e-1]),
                                                         #initial_value = 3e-6),
@@ -428,42 +446,209 @@ run(model="GroupedSPMe", data_frequency=data_frequency, parameter_values=grouped
 '''
 
 optim_params_grouped= {
-   "Positive electrode charge transfer time scale [s]":pybop.Parameter(pybop.Gaussian(38986,1e4,truncated_at=[1e-1,1e8]),transformation = pybop.LogTransformation()),
-    "Series resistance [Ohm]": pybop.Parameter(pybop.Gaussian(53,5,truncated_at=[20,100]),initial_value=53),
+   "Positive electrode charge transfer time scale [s]":pybop.Parameter(pybop.Gaussian(38986,1e5,truncated_at=[1e-1,1e8]),transformation = pybop.LogTransformation()),
+    "Series resistance [Ohm]": pybop.Parameter(pybop.Gaussian(53,25,truncated_at=[1,100]),initial_value=53),
     "Positive electrode capacitance [F]": pybop.Parameter(pybop.Gaussian(7e-6,1e-6, truncated_at=[1e-8,1e-2]),transformation=pybop.LogTransformation(),initial_value= 6e-6)
 }
 semi_circle,semi_circle_cost = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=freq_bounds_semicircle,
                                          parameter_values=grouped_parameter_values,optim_params=optim_params_grouped,Z_real = data_Z_re,Z_imag= data_Z_im)
 
+
 #%%
-f = 1/(2*np.pi * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"])
+print(semi_circle)
+#%%
 #print(grouped_parameter_values["Positive electrode charge transfer time scale [s]"])
-print("f",f)
-frequencies =np.logspace(-4,4,200)
-Z_fake = np.linspace(0,100,10)
+
+#f = 1/(2*np.pi * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"])
+#print("f",f)
+#frequencies =np.logspace(-4,4,200)
+#Z_fake = np.linspace(0,100,10)
 #print(semi_circle)
 grouped_parameter_values.update(semi_circle)
+grouped_parameter_values['Positive electrode relative thickness']=0.1389
+grouped_parameter_values["Positive particle diffusion time scale [s]"] = 70
+grouped_parameter_values["Negative particle diffusion time scale [s]"] = grouped_parameter_values["Positive particle diffusion time scale [s]"]
+grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"] = 0.0008
+grouped_parameter_values["Negative electrode electrolyte diffusion time scale [s]"] = grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"]
+f = 1/(2*np.pi * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"])
+print("f",f)
+print("f_diff",1/(2 * np.pi* grouped_parameter_values["Positive particle diffusion time scale [s]"])) 
+
+grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = 0.507 * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"] 
+grouped_parameter_values["Cation transference number"] = 0.4
+grouped_parameter_values["Measured cell capacity [A.s]"] =0.005 #1.56 
 #print(grouped_parameter_values)
-grouped_parameter_values["Negative electrode electrolyte diffusion time scale [s]"]=pybamm.Parameter("Positive electrode electrolyte diffusion time scale [s]")
-grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"] = 60
-grouped_parameter_values["Negative particle diffusion time scale [s]"] =pybamm.Parameter("Positive particle diffusion time scale [s]")
-grouped_parameter_values["Positive particle diffusion time scale [s]"] = 0.0001
-grouped_parameter_values["Separator electrolyte diffusion time scale [s]"]=60
-print(1/(2 * np.pi * 25* grouped_parameter_values["Positive particle diffusion time scale [s]"])) 
-run(model="GroupedSPMe", data_frequency=data_frequency, parameter_values=grouped_parameter_values,data_Z_re=data_Z_re,data_Z_im=data_Z_im )
-cubic_interpolated = CubicSpline(data_Z_re[::-1],data_Z_im[::-1])
+f_low,f_high = freq_bounds_electrolyte
+mask = (data_frequency >= f_low) & (data_frequency <= f_high)
+real =data_Z_re[mask]
+imag = data_Z_im[mask]
+data_trimmed = data_frequency[mask]
+print((func(0.955).evaluate()-func(.945).evaluate())/0.01)
+model_pybop = pybop.models.lithium_ion.GroupedSPMe(
+options={"surface form": "differential", "contact resistance": "true"})
+exp_r = pybamm.MeshGenerator(
+pybamm.Exponential1DSubMesh,
+submesh_params={"side": "right", "stretch": 6.0})
+submesh_types = model_pybop.default_submesh_types.copy()
+submesh_types["negative particle"] = exp_r
+submesh_types["positive particle"] = exp_r
+var_pts = {"x_n": 30, "x_s": 30, "x_p": 30, "r_n": 100, "r_p": 100}
+simulator_syn = pybop.pybamm.EISSimulator(
+            model_pybop, parameter_values=grouped_parameter_values,
+            f_eval=np.asarray(data_frequency),
+            var_pts=var_pts, submesh_types=submesh_types) 
+imp = simulator_syn.solve()["Impedance"].data
+plt.plot(np.real(imp),-np.imag(imp))
+plt.plot(data_Z_re,data_Z_im)
+#run(model="GroupedSPMe", data_frequency=data_trimmed, parameter_values=grouped_parameter_values,data_Z_re=real,data_Z_im=imag );
+#cubic_interpolated = CubicSpline(data_Z_re[::-1],data_Z_im[::-1])
 #plt.plot(Z_fake,cubic_interpolated(Z_fake))
 #%%
+print(grouped_parameter_values)
+grouped_parameter_values["Measured cell capacity [A.s]"] = 0.00685975
+optim_params_grouped= {
+   "Positive electrode charge transfer time scale [s]":pybop.Parameter(pybop.Gaussian(38986,1e6,truncated_at=[1e-1,1e8]),transformation = pybop.LogTransformation()),
+    "Series resistance [Ohm]": pybop.Parameter(pybop.Gaussian(53,25,truncated_at=[1,100]),initial_value=53),
+    "Positive electrode capacitance [F]": pybop.Parameter(pybop.Gaussian(7e-6,1e-6, truncated_at=[1e-8,1e-2]),transformation=pybop.LogTransformation(),initial_value= 6e-6)
+}
+semi_circle_2,semi_circle_cost_1 = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=freq_bounds_semicircle,
+                                         parameter_values=grouped_parameter_values,optim_params=optim_params_grouped,Z_real = data_Z_re,Z_imag= data_Z_im)
 
-tau_e_pos = pybamm.Parameter("Positive electrode electrolyte diffusion time scale [s]")
-grouped_parameter_values["Negative electrode electrolyte diffusion time scale [s]"] = tau_e_pos
-grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = 0.5074 * tau_e_pos
-grouped_parameter_values["Negative particle diffusion time scale [s]"] = \
-    pybamm.Parameter("Positive particle diffusion time scale [s]")
-grouped_parameter_values["Negative electrode charge transfer time scale [s]"] = \
-    pybamm.Parameter("Positive electrode charge transfer time scale [s]")
-grouped_parameter_values["Negative electrode capacitance [F]"] = \
-    pybamm.Parameter("Positive electrode capacitance [F]")
+#%%
+print(semi_circle_2)
+print({'Positive electrode charge transfer time scale [s]': np.float64(26.767014971554683), 'Positive electrode capacitance [F]': np.float64(2.40963741500189e-06), 'Series resistance [Ohm]': np.float64(53.65688976571483)}
+)
+
+#%%
+
+grouped_parameter_values.update(semi_circle_2)
+print(grouped_parameter_values["Positive particle diffusion time scale [s]"],grouped_parameter_values["Measured cell capacity [A.s]"]) #70,0.005
+#grouped_parameter_values["Positive particle diffusion time scale [s]"]= 70
+print(grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"]) #0.008
+#grouped_parameter_values["Measured cell capacity [A.s]"] = 0.00685975
+grouped_parameter_values["Positive particle diffusion time scale [s]"] = 86
+grouped_parameter_values["Negative particle diffusion time scale [s]"] = grouped_parameter_values["Positive particle diffusion time scale [s]"]
+grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"] = 0.008
+grouped_parameter_values["Cation transference number"] = .4
+grouped_parameter_values["Negative electrode electrolyte diffusion time scale [s]"] = grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"]
+f = 1/(2*np.pi * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"])
+print("f",f)
+print("f_diff",1/(2 * np.pi* grouped_parameter_values["Positive particle diffusion time scale [s]"])) 
+
+grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = 0.507 * grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"] 
+grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = (
+    0.507 * pybamm.Parameter("Positive electrode electrolyte diffusion time scale [s]"))
+
+model_pybop = pybop.models.lithium_ion.GroupedSPMe(
+options={"surface form": "differential", "contact resistance": "true"})
+exp_r = pybamm.MeshGenerator(
+pybamm.Exponential1DSubMesh,
+submesh_params={"side": "right", "stretch": 6.0})
+submesh_types = model_pybop.default_submesh_types.copy()
+submesh_types["negative particle"] = exp_r
+submesh_types["positive particle"] = exp_r
+var_pts = {"x_n": 30, "x_s": 30, "x_p": 30, "r_n": 100, "r_p": 100}
+simulator_syn = pybop.pybamm.EISSimulator(
+            model_pybop, parameter_values=grouped_parameter_values,
+            f_eval=np.asarray(data_frequency),
+            var_pts=var_pts, submesh_types=submesh_types) 
+imp = simulator_syn.solve()["Impedance"].data
+plt.plot(np.real(imp),-np.imag(imp))
+
+plt.plot(data_Z_re,data_Z_im)
+print(max(-np.imag(imp)))
+print(data_Z_im.max())
+
+#%% 
+grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = (
+    0.507 * pybamm.Parameter("Positive electrode electrolyte diffusion time scale [s]"))
+print(grouped_parameter_values)
+'''setting up second optimisation'''
+optim_params_lowfreq = {
+    "Positive particle diffusion time scale [s]": pybop.Parameter(
+        stats.loguniform(10, 137),
+        transformation=pybop.LogTransformation(), initial_value=85),
+
+    "Measured cell capacity [A.s]": pybop.Parameter(
+        stats.loguniform(0.00685975, 2),
+        transformation=pybop.LogTransformation(), initial_value=0.00685975),
+
+    "Positive electrode electrolyte diffusion time scale [s]": pybop.Parameter(
+        stats.loguniform(1e-4, 1e4),
+        transformation=pybop.LogTransformation(), initial_value=0.008),
+}
+low_freq,low_freq_cost = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=freq_bounds_diffusion,
+                                         parameter_values=grouped_parameter_values,optim_params=optim_params_lowfreq,Z_real = data_Z_re,Z_imag= data_Z_im)
+
+
+
+#%%
+'''electrolyte info'''
+grouped_parameter_values.update(low_freq)
+grouped_parameter_values.update({'Measured cell capacity [A.s]': np.float64(0.0068597500000000065), 'Positive particle diffusion time scale [s]': np.float64(136.99999999999673), 'Positive electrode electrolyte diffusion time scale [s]': np.float64(109.39556433526737)}
+)
+print(low_freq)
+model_pybop = pybop.models.lithium_ion.GroupedSPMe(
+options={"surface form": "differential", "contact resistance": "true"})
+exp_r = pybamm.MeshGenerator(
+pybamm.Exponential1DSubMesh,
+submesh_params={"side": "right", "stretch": 6.0})
+submesh_types = model_pybop.default_submesh_types.copy()
+submesh_types["negative particle"] = exp_r
+submesh_types["positive particle"] = exp_r
+var_pts = {"x_n": 30, "x_s": 30, "x_p": 30, "r_n": 100, "r_p": 100}
+simulator_syn = pybop.pybamm.EISSimulator(
+            model_pybop, parameter_values=grouped_parameter_values,
+            f_eval=np.asarray(data_frequency),
+            var_pts=var_pts, submesh_types=submesh_types) 
+imp = simulator_syn.solve()["Impedance"].data
+plt.plot(np.real(imp),-np.imag(imp))
+
+plt.plot(data_Z_re,data_Z_im)
+print(max(-np.imag(imp)))
+print(data_Z_im.max())
+#%%
+
+print(low_freq)
+print(grouped_parameter_values)
+
+
+#%%
+'''total optimisation
+'''
+dts_p = grouped_parameter_values["Positive particle diffusion time scale [s]"]
+mcc = grouped_parameter_values["Measured cell capacity [A.s]"]
+edts_p = grouped_parameter_values["Positive electrode electrolyte diffusion time scale [s]"]
+print(edts_p)
+print(dts_p)
+ets_p = grouped_parameter_values["Positive electrode charge transfer time scale [s]"]
+optim_params_total = {"Positive particle diffusion time scale [s]": pybop.Parameter(
+        stats.loguniform(dts_p/4, dts_p *4),
+        transformation=pybop.LogTransformation(), initial_value=85),
+    "Measured cell capacity [A.s]": pybop.Parameter(
+        stats.loguniform(mcc /5,mcc*5),
+        transformation=pybop.LogTransformation(), initial_value=0.00685975),
+    "Positive electrode electrolyte diffusion time scale [s]": pybop.Parameter(
+        stats.loguniform(edts_p/2, edts_p*2),
+        transformation=pybop.LogTransformation(), initial_value=edts_p),
+    "Positive electrode charge transfer time scale [s]":pybop.Parameter(stats.loguniform(1e-5, 1e5),transformation = pybop.LogTransformation(), initial_value=26),
+    "Series resistance [Ohm]": pybop.Parameter(pybop.Gaussian(53,10,truncated_at=[10,80]),initial_value=53),
+    "Positive electrode capacitance [F]": pybop.Parameter(pybop.Gaussian(2e-6,1e-6, truncated_at=[1e-8,1e-2]),transformation=pybop.LogTransformation(),initial_value= 2e-6)
+}
+
+total_opt,total_opt_cost = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=[data_frequency.min(),5e4],
+                                         parameter_values=grouped_parameter_values,optim_params=optim_params_total,Z_real = data_Z_re,Z_imag= data_Z_im)
+
+#%%
+#tau_e_pos = pybamm.Parameter("Positive electrode electrolyte diffusion time scale [s]")
+#grouped_parameter_values["Negative electrode electrolyte diffusion time scale [s]"] = tau_e_pos
+#grouped_parameter_values["Separator electrolyte diffusion time scale [s]"] = 0.5074 * tau_e_pos
+#grouped_parameter_values["Negative particle diffusion time scale [s]"] = \
+    #pybamm.Parameter("Positive particle diffusion time scale [s]")
+#grouped_parameter_values["Negative electrode charge transfer time scale [s]"] = \
+    #pybamm.Parameter("Positive electrode charge transfer time scale [s]")
+#grouped_parameter_values["Negative electrode capacitance [F]"] = \
+    #pybamm.Parameter("Positive electrode capacitance [F]")
 print(grouped_parameter_values)
 optim_params_diffusion_grouped = {
     # particle diffusion: tail onset 1/(2π·τ_d); wide but excludes the semicircle band
@@ -479,9 +664,9 @@ optim_params_diffusion_grouped = {
         initial_value=1.8e3,                  # the physically-converted value
     ),
     # arc magnitude ∝ (1−t⁺)²; bound away from 1 so it can't zero-out the feature
-    "Cation transference number": pybop.Parameter(
-        pybop.Gaussian(0.4, 0.2, truncated_at=[0.05, 0.95]),
-    ),
+    #"Cation transference number": pybop.Parameter(
+       # pybop.Gaussian(0.4, 0.2, truncated_at=[0.05, 0.95]),
+    #),
 }
 half_decade = np.log(10) / 2   # ≈ 1.15 in ln units
 diffusion_grouped, diffusion_grouped = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=freq_bounds_electrolyte,

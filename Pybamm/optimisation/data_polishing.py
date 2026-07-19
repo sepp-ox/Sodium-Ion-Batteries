@@ -7,6 +7,7 @@ import numpy as np
 import scipy as sc
 from numpy.fft import fft, ifft, fftfreq
 from scipy.interpolate import CubicSpline,make_interp_spline
+import scienceplots
 #%%
 #---description of file---#
 #imports Q,OCV dataset with stoich [0.5,1]
@@ -43,6 +44,7 @@ print("std of gaps:", gaps.std())
 order = np.argsort(gaps)[::-1]      
 for i in order[:5]:
     print(f"gap {gaps[i]:.4g} between x={x[i]:.4g} and x={x[i+1]:.4g}")
+plt.style.use(["science"])
 fig, ax = plt.subplots(2, 1, figsize=(8, 5))
 ax[0].plot(x, np.zeros_like(x), '|', markersize=20)   # rug plot of sample locations
 ax[0].set_title("sample locations")
@@ -108,7 +110,7 @@ ax[0].legend(loc = "upper left")
 ax[1].plot(Y[1:-1],residual)
 ax[2].set_title("(w.r.t quintic)")
 fig.tight_layout()
-plt.savefig("errorOCVSOC.png",dpi =300, bbox_inches = "tight")
+#plt.savefig("errorOCVSOC.png",dpi =300, bbox_inches = "tight")
 plt.show()
 
 
