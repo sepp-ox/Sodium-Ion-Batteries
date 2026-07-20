@@ -629,3 +629,14 @@ optim_params_diffusion_tail = {
        "NMO reaction rate constant [m2.5.mol-0.5.s-1]": pybop.Parameter(pybop.Gaussian(semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"],semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]*0.2 ), initial_value = semi_circle[0].best_inputs["NMO reaction rate constant [m2.5.mol-0.5.s-1]"]),
     "Negative electrode double-layer capacity [F.m-2]":pybamm.Parameter("Positive electrode double-layer capacity [F.m-2]")}                                         
  #Hz
+
+ '''optimising semicircle using GROUPED PARAMETER VALUES
+'''
+optim_params_grouped= {
+   "Positive electrode charge transfer time scale [s]":pybop.Parameter(pybop.Gaussian(38986,1e5,truncated_at=[1e-1,1e8]),transformation = pybop.LogTransformation()),
+    "Series resistance [Ohm]": pybop.Parameter(pybop.Gaussian(53,25,truncated_at=[1,100]),initial_value=53),
+    "Positive electrode capacitance [F]": pybop.Parameter(pybop.Gaussian(7e-6,1e-6, truncated_at=[1e-8,1e-2]),transformation=pybop.LogTransformation(),initial_value= 6e-6)
+}
+semi_circle,semi_circle_cost = section_based_optimisation(model = "GroupedSPMe",frequencies=data_frequency, f_bounds=freq_bounds_semicircle,
+                                         parameter_values=grouped_parameter_values,optim_params=optim_params_grouped,Z_real = data_Z_re,Z_imag= data_Z_im)
+
